@@ -1,5 +1,4 @@
 module Data.Wheel where
-  import Data.AssocList
   import Data.List
 
   -- Library providing the wheel data structure, and many useful functions
