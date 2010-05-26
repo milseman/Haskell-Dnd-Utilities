@@ -8,7 +8,8 @@ module Data.AssocList where
   -- (todo: enforce uniqueness at every step)
   -- This is mainly an extension of Data.List.Utils, provided in the missingh libraries
 
-
+  type AssocList a b = [(a,b)]
+    
   -- (Currently no new content)
 
   -- Aliases
@@ -35,3 +36,7 @@ module Data.AssocList where
   -- Whether the association list has the key
   hasKey :: Eq a => a -> [(a, b)] -> Bool
   hasKey = hasKeyAL
+
+  -- Partial function for lookup, will throw a runtime exception if not found
+  unsafeFetch :: Eq a => a -> [(a, b)] -> b
+  unsafeFetch k w = case lookup k w of Just v -> v

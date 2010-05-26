@@ -45,27 +45,26 @@ module Data.Wheel where
   backwardUntil = rotateUntil backward
 
   -- Insert an item right before the first element to satisfy the predicate.
-  -- If no element satisfies the predicate, the original wheel is returned.
-  -- Assumes wheel is non-empty
+  -- If no element satisfies the predicate, stick at end
   insertBefore :: Wheel a -> Predicate a -> a -> Wheel a
-  insertBefore w p x =
-    checkFirst w p $ case break p w of (left, right) -> left ++ (x : right)
+  insertBefore [] p x = [x]
+  insertBefore (e:es) p x = if p e then x : e : es else e : insertBefore es p x
+
 
   -- Insert an item right after the first element to satisfy the predicate.
-  -- If no element satisfies the predicate, the original wheel is returned.
-  -- Assumes wheel is non-empty
+  -- If no element satisfies the predicate, stick at end
   insertAfter :: Wheel a -> Predicate a -> a -> Wheel a
-  insertAfter w p x =
-    checkFirst w p $ case break p w of (left, (r:rs)) -> left ++ (r : x : rs)
+  insertAfter [] p x = [x]
+  insertAfter (e:es) p x = if p e then e : x : es else e : insertAfter es p x
 
   -- Move the top element to before the first element to satisfy the predicate
-  -- If no element satisfies the predicate, the top element is just discarded
+  -- If no element satisfies the predicate, stick at end
   moveBefore :: Wheel a -> Predicate a -> Wheel a
   moveBefore (x:xs) p = insertBefore xs p x
   moveBefore [] p = []
 
   -- Move the top element to after the first element to satisfy the predicate
-  -- If no element satisfies the predicate, the top element is just discarded
+  -- If no element satisfies the predicate, stick at end
   moveAfter :: Wheel a -> Predicate a -> Wheel a
   moveAfter (x:xs) p = insertAfter xs p x
   moveAfter [] p = []
