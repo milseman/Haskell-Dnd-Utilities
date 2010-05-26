@@ -37,6 +37,11 @@ module Dnd.DM.CombatTracker where
   roundNumber w = case unsafeFetch "Round Number" (unsafeFetch "Top Of Round" w) of
                     Int i -> i
 
+  -- Create a character given name and initiative
+  createCharacter :: String -> Int -> Character
+  createCharacter s i = (s, [("Initiative", Int i)])
+
+
   -- Add a character to a combat wheel
   addCharacter :: CombatWheel -> Character -> CombatWheel
   addCharacter w c = insertBefore w (isBefore c) c
@@ -45,17 +50,32 @@ module Dnd.DM.CombatTracker where
   addCharacters :: CombatWheel -> [Character] -> CombatWheel
   addCharacters = foldl addCharacter
 
+  -- Add an effect, such as an ongoing spell, to the top of the wheel
+  addEffect :: CombatWheel -> Effect -> CombatWheel
+  addEffect = flip (:)
+
+  -- Makes the top most entry delay until after the provided character's turn
+  -- Will delay until the end of the wheel if given character's name does not
+  -- exist in combat wheel (i.e. a single rotation without update)
+  delay :: CombatWheel -> String -> CombatWheel
+  delay w s = moveAfter w (\c -> fst c == s)
 
 
   -- | Pretty Printing
 
+  -- Doc for CombatWheels
   combatDoc :: CombatWheel -> P.Doc
   combatDoc w =
     text "Combat: " <> text ("(round " ++ show (roundNumber w) ++ ")")
       $$ nest 4 (P.vcat (map entryDoc w))
 
+  -- Doc for Entries
   entryDoc :: Entry -> P.Doc
-  entryDoc (s, al) = text s <> text (": ") $$ nest 20 (text (show al))
+  entryDoc (s, al) = text s <> text (": ") $$ nest 25 (alDoc al)
+
+  -- Doc for Association Lists
+  alDoc :: (Show a, Show b) => AssocList a b -> P.Doc
+  alDoc al = text "[ " <> P.vcat ( map ( text . (\(a,b) -> show a ++ " => " ++ show b)) al) <> text " ]"
 
 
 
@@ -83,7 +103,13 @@ module Dnd.DM.CombatTracker where
 
 
   -- Some test dudes
-  dummy1 = ("Dummy 1", [("Initiative", Int 4)])
-  dummy2 = ("Dummy 2", [("Initiative", Int 1)])
-  dummy3 = ("Dummy 3", [("Initiative", Int 14)])
-  dummy4 = ("Dummy 4", [("Initiative", Int 20)])
+  dummy1 = createCharacter "Dummy 1" 4
+  dummy2 = createCharacter "Dummy 2" 1
+  dummy3 = createCharacter "Dummy 3" 14
+  dummy4 = createCharacter "Dummy 4" 20
+
+  effect1 = ("Magical Effect Foo", [("Duration", Int 4)])
+
+  combat1 = addCharacters (effect1:combat) [dummy3, dummy2, dummy1]
+
+  example1 = combatDoc combat1
