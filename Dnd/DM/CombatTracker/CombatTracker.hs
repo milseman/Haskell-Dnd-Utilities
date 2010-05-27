@@ -3,13 +3,14 @@ module Dnd.DM.CombatTracker where
   import Data.Wheel
 
   import Data.List
+  import Control.Monad.State
 
   import qualified Text.PrettyPrint.HughesPJ as P
   import Text.PrettyPrint.HughesPJ (($+$), (<>), ($$), text, nest)
 
-
   type Agent = String
 
+  -- I thought about doing this with existential types, but didn't want rank-2 types
   data Info = String String | Int Int
               deriving (Show, Eq)
 
@@ -28,7 +29,7 @@ module Dnd.DM.CombatTracker where
   topOfRound :: Marker
   topOfRound =
     ( "Top Of Round", [ ("Round Number", Int 1)
-                      , ("Superfluous Stuff", String "Inferiorfluous Stuff")
+                      , ("Superfluous Stuff", String "Subfluous Stuff")
                       ]
     )
 
@@ -47,33 +48,33 @@ module Dnd.DM.CombatTracker where
   createEffect s i = (s, [("Duration", Int i)])
 
   -- Add a character to a combat wheel
-  addCharacter :: CombatWheel -> Character -> CombatWheel
-  addCharacter w c = insertBefore w (isBefore c) c
+  addCharacter :: Character -> CombatWheel -> CombatWheel
+  addCharacter c w = insertBefore w (isBefore c) c
 
   -- List version of above
-  addCharacters :: CombatWheel -> [Character] -> CombatWheel
-  addCharacters = foldl addCharacter
+  addCharacters :: [Character] -> CombatWheel -> CombatWheel
+  addCharacters cs w = foldl (flip addCharacter) w cs
 
   -- change me: figure out how to precisely do this
   -- Add an effect, such as an ongoing spell, to the slot right after the top
   -- of the wheel.
-  addEffect :: CombatWheel -> Effect -> CombatWheel
-  addEffect (e:es) effect = e : effect : es
-  addEffect [] effect = [effect]
+  addEffect :: Effect -> CombatWheel -> CombatWheel
+  addEffect effect (e:es) = e : effect : es
+  addEffect effect [] = [effect]
 
 
   -- Makes the top most entry delay until after the provided character's turn
   -- Will delay until the end of the wheel if given character's name does not
   -- exist in combat wheel (i.e. a single rotation without update)
   -- Note: Doesn't actually update the initiative value
-  delay :: CombatWheel -> String -> CombatWheel
-  delay w s = moveAfter w (\c -> fst c == s)
+  delay :: String -> CombatWheel -> CombatWheel
+  delay s w = moveAfter w (\c -> fst c == s)
 
 
   -- Advance the round, processing durations, round numbers, etc
   advance :: CombatWheel -> CombatWheel
   advance (e:es) | isOver e = es
-  advance w = process w updateEntry 
+  advance w = process w updateEntry
 
 
 
@@ -95,8 +96,10 @@ module Dnd.DM.CombatTracker where
     where innard a b = text $ show a ++ " => " ++ show b
           rest al = map (\(a,b) -> text ", " <> innard a b) al
 
+  -- Pretty Print a combat wheel
   pp :: CombatWheel -> IO()
   pp w = putStrLn . P.render $ combatDoc w
+
 
   -- | Utility functions
 
@@ -134,8 +137,26 @@ module Dnd.DM.CombatTracker where
                      Just (Int 0) -> True
                      _ -> False
 
-  -- More to come
 
+
+  -- | Combat: A state monad that holds a combat wheel.
+
+  -- type Combat = State CombatWheel ()
+
+  -- -- instance Monad Combat where
+  -- --   return a = Combat $ \w -> (a, w)
+  -- --   c >>= g = Combat $ \w -> let (x, res) = runCombat c w in runCombat (g x) res
+
+  -- -- Apply our function to a Combat
+  -- applyCombat :: (CombatWheel -> CombatWheel) -> Combat -> Combat
+  -- applyCombat = withState
+
+  -- -- Make a combat wheel into a Combat
+
+  -- mkCombat w = return () $ w
+
+
+  -- More to come
 
   -- Some test dudes
   dummy1 = createCharacter "Dummy 1" 4
@@ -145,8 +166,8 @@ module Dnd.DM.CombatTracker where
 
   effect1 = ("Magical Effect Foo", [("Duration", Int 4)])
 
-  combat1 = addCharacters combat [dummy3, dummy2, dummy1]
-  combat2 = addEffect combat1 effect1
+  combat1 = addCharacters [dummy3, dummy2, dummy1] combat
+  combat2 = addEffect effect1 combat1
 
   example1 = combatDoc combat1
   example2 = combatDoc combat2
