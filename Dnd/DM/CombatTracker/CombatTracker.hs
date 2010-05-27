@@ -20,16 +20,17 @@ module Dnd.DM.CombatTracker where
 
   type CombatWheel = Wheel Entry
 
-
   -- Combat wheel
   combat :: CombatWheel
   combat = [topOfRound]
 
   -- Entry for the top of the round
   topOfRound :: Marker
-  topOfRound = ("Top Of Round", [ ("Round Number", Int 0)
-                                , ("Initiative", String "Top")
-                                ])
+  topOfRound =
+    ( "Top Of Round", [ ("Round Number", Int 1)
+                      , ("Superfluous Stuff", String "Inferiorfluous Stuff")
+                      ]
+    )
 
   -- Find the current round number of combat. Undefined in the absence of a top
   -- of round marker
@@ -41,6 +42,9 @@ module Dnd.DM.CombatTracker where
   createCharacter :: String -> Int -> Character
   createCharacter s i = (s, [("Initiative", Int i)])
 
+  -- Create an effect given name and duration
+  createEffect :: String -> Int -> Effect
+  createEffect s i = (s, [("Duration", Int i)])
 
   -- Add a character to a combat wheel
   addCharacter :: CombatWheel -> Character -> CombatWheel
@@ -50,15 +54,27 @@ module Dnd.DM.CombatTracker where
   addCharacters :: CombatWheel -> [Character] -> CombatWheel
   addCharacters = foldl addCharacter
 
-  -- Add an effect, such as an ongoing spell, to the top of the wheel
+  -- change me: figure out how to precisely do this
+  -- Add an effect, such as an ongoing spell, to the slot right after the top
+  -- of the wheel.
   addEffect :: CombatWheel -> Effect -> CombatWheel
-  addEffect = flip (:)
+  addEffect (e:es) effect = e : effect : es
+  addEffect [] effect = [effect]
+
 
   -- Makes the top most entry delay until after the provided character's turn
   -- Will delay until the end of the wheel if given character's name does not
   -- exist in combat wheel (i.e. a single rotation without update)
+  -- Note: Doesn't actually update the initiative value
   delay :: CombatWheel -> String -> CombatWheel
   delay w s = moveAfter w (\c -> fst c == s)
+
+
+  -- Advance the round, processing durations, round numbers, etc
+  advance :: CombatWheel -> CombatWheel
+  advance (e:es) | isOver e = es
+  advance w = process w updateEntry 
+
 
 
   -- | Pretty Printing
@@ -75,9 +91,12 @@ module Dnd.DM.CombatTracker where
 
   -- Doc for Association Lists
   alDoc :: (Show a, Show b) => AssocList a b -> P.Doc
-  alDoc al = text "[ " <> P.vcat ( map ( text . (\(a,b) -> show a ++ " => " ++ show b)) al) <> text " ]"
+  alDoc ((a,b):al) = P.vcat (text "[ " <> innard a b : rest al) <> text " ]"
+    where innard a b = text $ show a ++ " => " ++ show b
+          rest al = map (\(a,b) -> text ", " <> innard a b) al
 
-
+  pp :: CombatWheel -> IO()
+  pp w = putStrLn . P.render $ combatDoc w
 
   -- | Utility functions
 
@@ -97,7 +116,23 @@ module Dnd.DM.CombatTracker where
       (Just (Int left), Just (Int right)) -> left > right
       (Just (Int i), _) -> False
 
+  -- Update the entry, i.e. decrement durations, increase turn counts, etc.
+  updateEntry :: Entry -> Entry
+  updateEntry (a, al) = (a, handle "Duration" (handle "Round Number" al))
+    where handle "Duration" al = case lookup "Duration" al of
+                                   Just (Int i) -> incr "Duration" (i-1)
+                                   Nothing -> al
+          handle "Round Number" al = case lookup "Round Number" al of
+                                       Just (Int i) -> incr "Round Number" (i+1)
+                                       Nothing -> al
+          incr s i = add al s (Int i)
 
+  -- Predicate saying whether the current effect is over (i.e. Duration 0)
+  -- If Duration is missing, or non-zero, then false. Else true
+  isOver :: Entry -> Bool
+  isOver (a, al) = case lookup "Duration" al of
+                     Just (Int 0) -> True
+                     _ -> False
 
   -- More to come
 
@@ -110,6 +145,8 @@ module Dnd.DM.CombatTracker where
 
   effect1 = ("Magical Effect Foo", [("Duration", Int 4)])
 
-  combat1 = addCharacters (effect1:combat) [dummy3, dummy2, dummy1]
+  combat1 = addCharacters combat [dummy3, dummy2, dummy1]
+  combat2 = addEffect combat1 effect1
 
   example1 = combatDoc combat1
+  example2 = combatDoc combat2
