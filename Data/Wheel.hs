@@ -33,54 +33,53 @@ module Data.Wheel where
   -- | Rotate until the top element satisfies predicate.
   -- If no element satisfies, no rotation occurs.
   -- rotM: rotation method to use until p satisfies
-  rotateUntil :: Rotation a -> Wheel a -> Predicate a -> Wheel a
-  rotateUntil rotM w p = checkFirst w p $ safeRotateUntil rotM w p
-    where safeRotateUntil rotM w p = if p (top w) then w
-                                            else safeRotateUntil rotM (rotM w) p
+  rotateUntil :: Rotation a -> Predicate a -> Wheel a -> Wheel a
+  rotateUntil rotM p w = checkFirst p w $ safeRotateUntil rotM p w
+    where safeRotateUntil rotM p w = if p (top w) then w
+                                            else safeRotateUntil rotM p (rotM w)
 
   -- | RotateUntil specialized for forward
-  forwardUntil :: Wheel a -> Predicate a -> Wheel a
+  forwardUntil :: Predicate a -> Wheel a -> Wheel a
   forwardUntil = rotateUntil forward
 
   -- | RotateUntil specialized for backward
-  backwardUntil :: Wheel a -> Predicate a -> Wheel a
+  backwardUntil :: Predicate a -> Wheel a -> Wheel a
   backwardUntil = rotateUntil backward
 
   -- | Insert an item at given position relative to the first element to satisfy
   -- the predicate.
   -- If no element satisfies the predicate, stick at end
-  insertAt :: Wheel a -> Predicate a -> a -> Position -> Wheel a
-  insertAt [] p x pos = [x]
-  insertAt (e:es) p x Before = if p e then x : e : es else e : insertAt es p x Before
-  insertAt (e:es) p x After = if p e then e : x : es else e : insertAt es p x After
+  insertAt :: Predicate a -> a -> Position -> Wheel a -> Wheel a
+  insertAt p x pos [] = [x]
+  insertAt p x Before (e:es) = if p e then x : e : es else e : insertAt p x Before es
+  insertAt p x After (e:es)  = if p e then e : x : es else e : insertAt p x After es
 
   -- | Move the top element to given position relative to the first element to satisfy
   -- the predicate
   -- If no element satisfies the predicate, stick at end
-  move :: Wheel a -> Predicate a -> Position -> Wheel a
-  move (x:xs) p pos = insertAt xs p x pos
-  move [] _ _ = []
+  move :: Predicate a -> Position -> Wheel a -> Wheel a
+  move p pos (x:xs) = insertAt p x pos xs
+  move _ _ [] = []
 
   -- | Process an element and advance.
   -- The supplied funtion takes the top of the wheel, and returns a new element
   -- to replace it, then the wheel is rotated forward
-  process :: Wheel a -> Processor a -> Wheel a
-  process (x:xs) f = forward $ f x : xs
-  process [] f = []
+  process :: Processor a -> Wheel a -> Wheel a
+  process f (x:xs) = forward $ f x : xs
+  process f [] = []
 
   -- | Replace the first entry matching the predicate with the new entry
   -- If no entries match, the original wheel is returned
-  replace :: Wheel a -> a -> (a -> Bool) -> Wheel a
-  replace w new p = case break p w of (left, r:rs) -> left ++ (new:rs)
+  replace :: a -> (a -> Bool) -> Wheel a -> Wheel a
+  replace new p w = case break p w of (left, r:rs) -> left ++ (new:rs)
                                       (left, []) -> left
 
-
   -- Internal helper: see if no one in the wheel satisfies
-  none :: Wheel a -> Predicate a -> Bool
-  none w p = not $ any p w
+  none :: Predicate a -> Wheel a -> Bool
+  none p w = not $ any p w
 
   -- Internal helper: Control flow construct that returns argument wheel when
   -- none satisfy, else continues to perform operation.
   -- Relies on laziness
-  checkFirst :: Wheel a -> Predicate a -> Wheel a -> Wheel a
-  checkFirst w p operation = if none w p then w else operation
+  checkFirst :: Predicate a -> Wheel a -> Wheel a -> Wheel a
+  checkFirst p operation w = if none p w then w else operation

@@ -35,32 +35,37 @@ module Dnd.DM.CombatTracker.Core where
   roundNumber :: CombatWheel -> Int
   roundNumber w = unsafeFetch "Round-Number" (unsafeFetch "Top-Of-Round" w)
 
-  -- | Add a character to a combat wheel
-  addCharacter :: Character -> CombatWheel -> CombatWheel
-  addCharacter c w = insertAt w (isBefore c) c Before
-
-  -- | List version of addCharacter
-  addCharacters :: [Character] -> CombatWheel -> CombatWheel
-  addCharacters cs w = foldl (flip addCharacter) w cs
-
-  -- change me: figure out how to precisely do this
-  -- | Add an effect, such as an ongoing spell, and insert it at the given position
-  -- relative to the specified entry
-  addEffect :: Effect -> Position -> String -> CombatWheel -> CombatWheel
-  addEffect effect pos entry w = insertAt w (isEntry entry) effect pos
-
   -- | Create a character given name and initiative
   createCharacter :: String -> Int -> Character
   createCharacter s i = (s, [("Initiative", i)])
 
-  -- | Create an effect given name and duration
-  createEffect :: String -> Int -> Effect
-  createEffect s i = (s, [("Duration", i)])
+  -- | Add a character to a combat wheel
+  addCharacter :: String -> Int -> CombatWheel -> CombatWheel
+  addCharacter s i = insertAt (isBefore char) char Before
+    where char = createCharacter s i
+
+  -- | List version of addCharacter
+  addCharacters :: [(String,Int)] -> CombatWheel -> CombatWheel
+  addCharacters cs w = foldl (flip (uncurry addCharacter)) w cs
 
   -- | Create a monster, given name, initiative, and hp
   createMonster :: String -> Int -> Int -> Monster
   createMonster s i hp = (s, add entry "HP" ( hp))
     where entry = snd $ createCharacter s i
+
+  -- | Add a monster to a combat wheel
+  addMonster :: String -> Int -> Int -> CombatWheel -> CombatWheel
+  addMonster s i hp = insertAt (isBefore mon) mon Before
+    where mon = createMonster s i hp
+
+  -- | Create an effect given name and duration
+  createEffect :: String -> Int -> Effect
+  createEffect s i = (s, [("Duration", i)])
+
+  -- | Add an effect, such as an ongoing spell, and insert it at the given position
+  -- relative to the specified entry
+  addEffect :: String -> Int -> Position -> String -> CombatWheel -> CombatWheel
+  addEffect s i pos entry = insertAt (isEntry entry) (createEffect s i) pos
 
 
   -- | Remove the Entry whose name is passed in
@@ -70,7 +75,7 @@ module Dnd.DM.CombatTracker.Core where
 
   -- | Damage a monster
   damage :: String -> Int -> CombatWheel -> CombatWheel
-  damage s i w = replace w (createMonster s initiative newhp) (isEntry s)
+  damage s i w = replace (createMonster s initiative newhp) (isEntry s) w
     where initiative = unsafeFetch "Initiative" monster
           newhp = unsafeFetch "HP" monster - i
           monster = unsafeFetch s w
@@ -78,7 +83,7 @@ module Dnd.DM.CombatTracker.Core where
   -- | Heal a monster
   -- Does NOT know or follow any game mechanics, such as max hp or tmp hp
   heal :: String -> Int -> CombatWheel -> CombatWheel
-  heal s i w = damage s (0-i) w
+  heal s i = damage s (0-i)
 
 
   -- | Makes the top most entry delay until after the provided character's turn
@@ -86,7 +91,7 @@ module Dnd.DM.CombatTracker.Core where
   -- exist in combat wheel (i.e. a single rotation without update)
   -- Note: Doesn't actually update the initiative value
   delay :: String -> CombatWheel -> CombatWheel
-  delay s w = move w (isEntry s) After
+  delay s = move (isEntry s) After
 
 
   -- | Advance the round, processing durations, round numbers, hp etc
@@ -94,7 +99,7 @@ module Dnd.DM.CombatTracker.Core where
   advance :: CombatWheel -> CombatWheel
   advance (e:es) | or [isOver e, isDead e] = es
   advance (e:es) | isUnconscious e = es ++ [e]  -- skip its turn
-  advance w = process w updateEntry
+  advance w = process updateEntry w
 
 
   -- | Pretty Printing
@@ -119,7 +124,7 @@ module Dnd.DM.CombatTracker.Core where
 
   -- | Pretty Print a combat wheel
   pp :: CombatWheel -> IO()
-  pp w = putStrLn . P.render $ combatDoc w
+  pp = putStrLn . P.render . combatDoc
 
 
   -- | Utility functions
@@ -154,7 +159,7 @@ module Dnd.DM.CombatTracker.Core where
           handle "Round-Number" al = case lookup "Round-Number" al of
                                        Just ( i) -> incr "Round-Number" (i+1)
                                        Nothing -> al
-          incr s i = add al s ( i)
+          incr s i = add al s i
 
   -- | Predicate saying whether the current effect is over (i.e. Duration 0)
   -- If Duration is missing or positive, then false. Else true
@@ -184,22 +189,15 @@ module Dnd.DM.CombatTracker.Core where
   -- More to come
 
   -- Some test dudes
-  dummy1 = createCharacter "Dummy 1" 4
-  dummy2 = createCharacter "Dummy 2" 1
-  dummy3 = createCharacter "Dummy 3" 14
-  dummy4 = createCharacter "Dummy 4" 20
-
-  mon1 = createMonster "Spider 1" 10 4
-  mon2 = createMonster "Wolf 1" 16 10
-
-  effect1 = createEffect "Wall-Of-Flame" 4
-
-  combat1 = addCharacters [dummy3, dummy2, dummy1, mon1, mon2] combat
-  combat2 = addEffect effect1 After "Top-Of-Round" combat1
+  combatinitial = addCharacters [ ("Dummy 1",4), ("Dummy 2",1), ("Dummy 3", 14)
+                                , ("Dummy 4",20) ] combat
+  combat1a = addMonster "Spider 1" 10 4 combatinitial
+  combat1 = addMonster "Wolf 1" 16 10 combat1a
+  combat2 = addEffect "Wall-Of-Flame" 4 After "Top-Of-Round" combat1
   combat3 = damage "Wolf 1" 3 $ combat2
   combat4 = advance $ advance combat3
   combat5 = delay "Spider 1" combat4
-  combat6 = damage "Spider 1" 5 combat5
+  combat6 = damage "Spider 1" 15 combat5
   combat7 = advance $ advance combat6
   combat8 = heal "Wolf 1" 2 combat7
 

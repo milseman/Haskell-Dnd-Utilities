@@ -30,9 +30,9 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   help "monster"   = "  Usage: monster <name> <initiative> <hp> [<pos> <entry-name>]"
                      ++ "\n  Default: insert according to provided initiative"
   help "effect"    = "  Usage: effect <name> <duration> [<pos> <entry-name>]"
-                     ++ "\n  Default: insert at top"
+                     ++ "\n  Default: insert after what's on top"
   help "damage"    = "  Usage: damage <name> <hp>"
-  help "delay"     = "  Usage: delay <pos> <entry-name>"
+  help "delay"     = "  Usage: delay <entry-name>"
   help "next"      = "  Usage: next [<turns>]"
                      ++ "\n  Default: 1"
   help "move"      = "  Usage: move <name> <pos> <name>"
@@ -61,7 +61,6 @@ module Dnd.DM.CombatTracker.CTInterpreter where
                 else putStrLn $ help command
     where (command:args) = words s
 
-
   commandHandler "character" [n,init,pos,n2] = echo ""
   commandHandler "character" [n,init] = echo ""
   commandHandler "monster" [n,init,hp,pos,n2] = echo ""
@@ -70,6 +69,7 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   commandHandler "effect" [n,dur] = echo ""
   commandHandler "damage" [n,dam] = echo ""
   commandHandler "delay" [n] = echo ""
+  commandHandler "next" [i] | (head i == '-') = putStrLn $ "Error: negative number"
   commandHandler "next" [i] = echo ""
   commandHandler "next" [] = echo ""
   commandHandler "move" [n,pos,n2]= echo ""
