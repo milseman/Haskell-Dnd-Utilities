@@ -28,12 +28,12 @@ module Dnd.DM.CombatTracker.Core where
 
   -- | Entry for the top of the round
   topOfRound :: Marker
-  topOfRound = ("Top Of Round", [("Round Number", 1)])
+  topOfRound = ("Top-Of-Round", [("Round-Number", 1)])
 
   -- | Find the current round number of combat. Undefined in the absence of a top
   -- of round marker
   roundNumber :: CombatWheel -> Int
-  roundNumber w = unsafeFetch "Round Number" (unsafeFetch "Top Of Round" w)
+  roundNumber w = unsafeFetch "Round-Number" (unsafeFetch "Top-Of-Round" w)
 
   -- | Add a character to a combat wheel
   addCharacter :: Character -> CombatWheel -> CombatWheel
@@ -76,7 +76,8 @@ module Dnd.DM.CombatTracker.Core where
           monster = unsafeFetch s w
 
   -- | Heal a monster
-  heal :: String -> Int -> CombatWheel -> CombatWheel  
+  -- Does NOT know or follow any game mechanics, such as max hp or tmp hp
+  heal :: String -> Int -> CombatWheel -> CombatWheel
   heal s i w = damage s (0-i) w
 
 
@@ -88,10 +89,11 @@ module Dnd.DM.CombatTracker.Core where
   delay s w = move w (isEntry s) After
 
 
-  -- | Advance the round, processing durations, round numbers, etc
+  -- | Advance the round, processing durations, round numbers, hp etc
+  -- Does NOT know or follow game mechanics, such as bleeding out
   advance :: CombatWheel -> CombatWheel
-  advance (e:es) | isOver e = es
-  advance (e:es) | isUnconscious e = es
+  advance (e:es) | or [isOver e, isDead e] = es
+  advance (e:es) | isUnconscious e = es ++ [e]  -- skip its turn
   advance w = process w updateEntry
 
 
@@ -102,16 +104,17 @@ module Dnd.DM.CombatTracker.Core where
   combatDoc w =
     text "Combat: " <> text ("(round " ++ show (roundNumber w) ++ ")")
       $$ nest 4 (P.vcat (map ((flip entryDoc) nesting) w))
-        where nesting = 4 + maximum (map (length . fst) w)
+        where nesting = 6 + maximum (map (length . fst) w) -- pad for unconscious
 
   -- | Doc for Entries
   entryDoc :: Entry -> Int -> P.Doc
-  entryDoc (s, al) nesting = text s <> text (": ") $$ nest nesting (alDoc al)
+  entryDoc (s, al) nesting = entryname <> text (":") $$ nest nesting (alDoc al)
+    where entryname = text $ if isUnconscious (s, al) then "<" ++ s ++ ">" else s
 
   -- | Doc for Association Lists
-  alDoc :: (Show a, Show b) => AssocList a b -> P.Doc
+  alDoc :: (Show b) => AssocList String b -> P.Doc
   alDoc ((a,b):al) = P.vcat (text "[ " <> innard a b : rest al) <> text " ]"
-    where innard a b = text $ show a ++ " => " ++ show b
+    where innard a b = text $ a ++ " => " ++ show b
           rest al = map (\(a,b) -> text ", " <> innard a b) al
 
   -- | Pretty Print a combat wheel
@@ -142,14 +145,14 @@ module Dnd.DM.CombatTracker.Core where
 
   -- | Update the entry, i.e. decrement durations, increase turn counts, etc.
   updateEntry :: Entry -> Entry
-  updateEntry (a, al) = (a, handleThese ["Duration", "Round Number"] al)
+  updateEntry (a, al) = (a, handleThese ["Duration", "Round-Number"] al)
     where handleThese (x:xs) al = handle x (handleThese xs al)
           handleThese [] al = al
           handle "Duration" al = case lookup "Duration" al of
                                    Just ( i) -> incr "Duration" (i-1)
                                    Nothing -> al
-          handle "Round Number" al = case lookup "Round Number" al of
-                                       Just ( i) -> incr "Round Number" (i+1)
+          handle "Round-Number" al = case lookup "Round-Number" al of
+                                       Just ( i) -> incr "Round-Number" (i+1)
                                        Nothing -> al
           incr s i = add al s ( i)
 
@@ -167,6 +170,14 @@ module Dnd.DM.CombatTracker.Core where
                             Just i -> i < 0
                             Nothing -> False
 
+  -- | Predicate saying whether the current monster is dead
+  -- If HP is missing or > -10 then False, else True
+  isDead :: Entry -> Bool
+  isDead (a, al) = case lookup "HP" al of
+                            Just i -> i <= -10
+                            Nothing -> False
+
+
   -- Posible todos: handle monster's being unconscious, and bleeding out
 
 
@@ -181,15 +192,16 @@ module Dnd.DM.CombatTracker.Core where
   mon1 = createMonster "Spider 1" 10 4
   mon2 = createMonster "Wolf 1" 16 10
 
-  effect1 = createEffect "Magical Effect Foo" 4
+  effect1 = createEffect "Wall-Of-Flame" 4
 
   combat1 = addCharacters [dummy3, dummy2, dummy1, mon1, mon2] combat
-  combat2 = addEffect effect1 After "Top Of Round" combat1
+  combat2 = addEffect effect1 After "Top-Of-Round" combat1
   combat3 = damage "Wolf 1" 3 $ combat2
   combat4 = advance $ advance combat3
   combat5 = delay "Spider 1" combat4
   combat6 = damage "Spider 1" 5 combat5
   combat7 = advance $ advance combat6
+  combat8 = heal "Wolf 1" 2 combat7
 
   example1 = combatDoc combat1
   example2 = combatDoc combat2
@@ -198,3 +210,4 @@ module Dnd.DM.CombatTracker.Core where
   example5 = combatDoc combat5
   example6 = combatDoc combat6
   example7 = combatDoc combat7
+  example8 = combatDoc combat8
