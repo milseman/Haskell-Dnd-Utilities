@@ -1,6 +1,6 @@
 module Dnd.DM.CombatTracker.Core where
   import Data.AssocList
-  import Data.Wheel
+  import Data.Wheel hiding (check)
 
   import Data.List
   import Control.Monad.State
@@ -14,6 +14,8 @@ module Dnd.DM.CombatTracker.Core where
   -- I thought about doing this with existential types, but didn't want rank-2 types
   -- So I decided to just make this a synonym for Int
   type Info = Int
+  type Initiative = Int
+  type HP = Int
 
   type Entry = (EntryName, AssocList FieldName Info)
   type Character = Entry
@@ -22,6 +24,10 @@ module Dnd.DM.CombatTracker.Core where
   type Monster = Entry
 
   type CombatWheel = Wheel Entry
+  type CombatAction = CombatWheel -> CombatWheel
+
+  -- | Runtime exception for when a specified entry is not found
+  entryNotFound = error "Entry Not Found"
 
   -- | Combat wheel
   combat :: CombatWheel
@@ -31,8 +37,7 @@ module Dnd.DM.CombatTracker.Core where
   topOfRound :: Marker
   topOfRound = ("Top-Of-Round", [("Round-Number", 1)])
 
-  -- | Find the current round number of combat. Undefined in the absence of a top
-  -- of round marker
+  -- | Find the current round number of combat. Throws AssocList.notFound
   roundNumber :: CombatWheel -> Int
   roundNumber w = unsafeFetch "Round-Number" (unsafeFetch "Top-Of-Round" w)
 
@@ -40,60 +45,81 @@ module Dnd.DM.CombatTracker.Core where
   createCharacter :: EntryName -> Int -> Character
   createCharacter s i = (s, [("Initiative", i)])
 
-  -- | Add a character to a combat wheel
-  addCharacter :: EntryName -> Int -> CombatWheel -> CombatWheel
-  addCharacter s i = insertAt (isBefore char) char Before
+  -- | Add a character to a combat wheel, based on initiative
+  -- If nothing else has an initiative, then put it last
+  addCharacter :: EntryName -> Int -> CombatAction
+  addCharacter s i = insertAtElseEnd (isBefore char) char Before
     where char = createCharacter s i
 
+  -- | Add a character to a specified location. Throws entryNotFound
+  addCharacterAt :: EntryName -> Int -> Position -> EntryName -> CombatAction
+  addCharacterAt s i pos target w =
+    check target w $ insertAt (isEntry target) (createCharacter s i) pos w
+
   -- | List version of addCharacter
-  addCharacters :: [(EntryName,Int)] -> CombatWheel -> CombatWheel
-  addCharacters cs w = foldl (flip (uncurry addCharacter)) w cs
+  addCharacters :: [(EntryName,Int)] -> CombatAction
+  addCharacters cs w = foldl (\w (s,i) -> addCharacter s i w) w cs
 
   -- | Create a monster, given name, initiative, and hp
-  createMonster :: EntryName -> Int -> Int -> Monster
+  createMonster :: EntryName -> Int -> HP -> Monster
   createMonster s i hp = (s, add entry "HP" ( hp))
     where entry = snd $ createCharacter s i
 
   -- | Add a monster to a combat wheel
-  addMonster :: EntryName -> Int -> Int -> CombatWheel -> CombatWheel
-  addMonster s i hp = insertAt (isBefore mon) mon Before
+  addMonster :: EntryName -> Int -> HP -> CombatAction
+  addMonster s i hp = insertAtElseEnd (isBefore mon) mon Before
     where mon = createMonster s i hp
+
+  -- | Add a monster to a specified location. Throws entryNotFound
+  addMonsterAt :: EntryName -> Int -> HP -> Position -> EntryName -> CombatAction
+  addMonsterAt s i hp pos target w =
+    check target w $ insertAt (isEntry target) (createMonster s i hp) pos w
+
+  -- | List version of addMonster
+  addMonsters :: [(EntryName,Int,HP)] -> CombatAction
+  addMonsters cs w = foldl (\w (s,i,hp) -> addMonster s i hp w) w cs
 
   -- | Create an effect given name and duration
   createEffect :: EntryName -> Int -> Effect
   createEffect s i = (s, [("Duration", i)])
 
-  -- | Add an effect, such as an ongoing spell, and insert it at the given position
-  -- relative to the specified entry
-  addEffect :: EntryName -> Int -> Position -> EntryName -> CombatWheel -> CombatWheel
-  addEffect s i pos entry = insertAt (isEntry entry) (createEffect s i) pos
+  -- | Add an effect at the entry after the topmost one. If wheel is empty, just
+  -- inject it
+  addEffect :: EntryName -> Int -> CombatAction
+  addEffect s i (e:es) = e : createEffect s i : es
+  addEffect s i [] = [createEffect s i]
 
+  -- | Add an effect, such as an ongoing spell, and insert it at the given position
+  -- relative to the specified entry. Throws entryNotFound
+  addEffectAt :: EntryName -> Int -> Position -> EntryName -> CombatAction
+  addEffectAt s i pos target w =
+    check target w $ insertAt (isEntry target) (createEffect s i) pos w
 
   -- | Remove the Entry whose name is passed in
-  remove :: EntryName -> CombatWheel -> CombatWheel
+  remove :: EntryName -> CombatAction
   remove = flip del
 
   -- | Move the Entry named to pos relative to third argument
   -- Note: undefined when the entry name is not present
-  move :: EntryName -> Position -> EntryName -> CombatWheel -> CombatWheel
+  move :: EntryName -> Position -> EntryName -> CombatAction
   move tomove pos target w = insertAt (isEntry target) entry pos (del w tomove)
     where entry = (tomove, unsafeFetch tomove w)
 
   -- | Update a field in the named Entry to a new value, adding it if it's missing
-  updateField :: EntryName -> FieldName -> Info -> CombatWheel -> CombatWheel
+  updateField :: EntryName -> FieldName -> Info -> CombatAction
   updateField s fieldname i (e:es) = if isEntry s e
                                      then (s, add (snd e) fieldname i) : es
                                      else e : updateField s fieldname i es
 
-  -- | Remove a field in the named Entry 
-  removeField :: EntryName -> FieldName -> CombatWheel -> CombatWheel
+  -- | Remove a field in the named Entry
+  removeField :: EntryName -> FieldName -> CombatAction
   removeField s fieldname (e:es) = if isEntry s e
                                    then (s, del (snd e) fieldname) : es
                                    else e : removeField s fieldname es
 
 
   -- | Damage a monster
-  damage :: EntryName -> Int -> CombatWheel -> CombatWheel
+  damage :: EntryName -> Int -> CombatAction
   damage s i w = replace (createMonster s initiative newhp) (isEntry s) w
     where initiative = unsafeFetch "Initiative" monster
           newhp = unsafeFetch "HP" monster - i
@@ -101,7 +127,7 @@ module Dnd.DM.CombatTracker.Core where
 
   -- | Heal a monster
   -- Does NOT know or follow any game mechanics, such as max hp or tmp hp
-  heal :: EntryName -> Int -> CombatWheel -> CombatWheel
+  heal :: EntryName -> Int -> CombatAction
   heal s i = damage s (0-i)
 
 
@@ -109,13 +135,13 @@ module Dnd.DM.CombatTracker.Core where
   -- Will delay until the end of the wheel if given character's name does not
   -- exist in combat wheel (i.e. a single rotation without update)
   -- Note: Doesn't actually update the initiative value
-  delay :: EntryName -> CombatWheel -> CombatWheel
+  delay :: EntryName -> CombatAction
   delay s = moveTo (isEntry s) After
 
 
   -- | Advance the round, processing durations, round numbers, hp etc
   -- Does NOT know or follow game mechanics, such as bleeding out
-  advance :: CombatWheel -> CombatWheel
+  advance :: CombatAction
   advance (e:es) | or [isOver e, isStatus Dead e] = es
   advance (e:es) | isStatus Unconscious e = es ++ [e]  -- skip its turn
   advance w = process updateEntry w
@@ -127,8 +153,9 @@ module Dnd.DM.CombatTracker.Core where
   combatDoc :: CombatWheel -> P.Doc
   combatDoc w =
     text "Combat: " <> text ("(round " ++ show (roundNumber w) ++ ")")
-      $$ nest 4 (P.vcat (map ((flip entryDoc) nesting) w))
-        where nesting = 6 + maximum (map (length . fst) w) -- pad for unconscious
+      $$ nest 4 (P.vcat (drawBoxes entries))
+        where entries = (map ((flip entryDoc) nesting) w)
+              nesting = 4 + maximum (map (length . fst) w) -- pad for unconscious
 
   -- | Doc for Entries
   entryDoc :: Entry -> Int -> P.Doc
@@ -143,14 +170,36 @@ module Dnd.DM.CombatTracker.Core where
 
   -- | Doc for Association Lists
   alDoc :: (Show b) => AssocList String b -> P.Doc
-  alDoc ((a,b):al) = P.vcat (text "[ " <> innard a b : rest al) <> text " ]"
+  alDoc ((a,b):al) = P.vcat (innard a b : rest al)
     where innard a b = text $ a ++ " => " ++ show b
-          rest al = map (\(a,b) -> text ", " <> innard a b) al
-  alDoc [] = text "[]"
+          rest al = map (\(a,b) -> innard a b) al
+  alDoc [] = P.empty
+
+  -- | have a line of ---- as long as the longest line in doc
+  drawlines :: P.Doc -> P.Doc
+  drawlines doc = text (replicate maxLen '-' )
+    where maxLen = 4 + (maximum . map length . lines . P.render) doc
+
+  -- | Draw a box around each doc in a list
+  drawBoxes :: [P.Doc] -> [P.Doc]
+  drawBoxes docs = lines : intersperse lines (drawPipes docs) ++ [lines]
+    where lines = drawlines $ P.vcat docs
+
+  -- | Draw pipes around each doc in a list
+  drawPipes :: [P.Doc] -> [P.Doc]
+  drawPipes docs = map (surroundPipes maxLen) docs
+      where maxLen = maximum . map length . lines $ concatMap (\d -> P.render d ++ "\n") docs
+
+
+  surroundPipes len d = P.vcat . map surr . lines $ P.render d
+    where surr s = text ("| " ++ s ++ remainingSpaces s ++ " |")
+          remainingSpaces s = replicate (len - length s) ' '
+
 
   -- | Pretty Print a combat wheel
   pp :: CombatWheel -> String
-  pp = P.render . combatDoc
+  pp w = P.render $ drawlines doc $$ doc $$ drawlines doc
+    where doc = combatDoc w
 
 
   -- | Utility functions
@@ -161,14 +210,12 @@ module Dnd.DM.CombatTracker.Core where
 
   -- | Predicate telling whether the first argument comes before the second. Attempts
   -- to look for the field Initiative in the second argument, at which points it
-  -- compares. If Initiative is not present, or is non-integer, then false is
-  -- returned.
-  -- Undefined if the first argument has no integer Initiative.
+  -- compares. If Initiative is not present in either argument, false is returned.
   isBefore :: Character -> Character -> Bool
   isBefore char char2 =
     case (initOf char, initOf char2) of
-      (Just ( left), Just ( right)) -> left > right
-      (Just ( i), _) -> False
+      (Just left, Just right) -> left > right
+      (_,_) -> False
 
   -- | Predicate to match an entry with it's name
   isEntry :: EntryName -> Entry -> Bool
@@ -194,6 +241,10 @@ module Dnd.DM.CombatTracker.Core where
                      Just i -> i <= 0
                      _ -> False
 
+  -- | Predicate saying whether any entry has an Initiative
+  anyInitiative :: CombatWheel -> Bool
+  anyInitiative = or . map (hasKey "Initiative") . map snd
+
   data Status = Conscious | Unconscious | Dead | Staggered | UNDEFINED
               deriving (Eq, Show)
 
@@ -211,14 +262,22 @@ module Dnd.DM.CombatTracker.Core where
           status i | i <= -10             = Dead
 
 
+  -- Internal checker, check to see if an entry is present, otherwise throw
+  -- entryNotFound.
+  -- Takes advantage of laziness to implement control flow what wont evaluate
+  -- the second argument if check fails
+  check :: EntryName -> CombatWheel -> CombatWheel -> CombatWheel
+  check e w safeW | any (isEntry e) w = safeW
+  check _ _ _ = entryNotFound
+
+
   -- More to come
 
   -- Some test dudes
   combatinitial = addCharacters [ ("Dummy 1",4), ("Dummy 2",1), ("Dummy 3", 14)
                                 , ("Dummy 4",20) ] combat
-  combat1a = addMonster "Spider 1" 10 4 combatinitial
-  combat1 = addMonster "Wolf 1" 16 10 combat1a
-  combat2 = addEffect "Wall-Of-Flame" 4 After "Top-Of-Round" combat1
+  combat1 = addMonsters [("Wolf 1",16,10), ("Spider 1",10,4)] combatinitial
+  combat2 = addEffectAt "Wall-Of-Flame" 4 After "Top-Of-Round" combat1
   combat3 = damage "Wolf 1" 3 $ combat2
   combat4 = advance $ advance combat3
   combat5 = delay "Spider 1" combat4
