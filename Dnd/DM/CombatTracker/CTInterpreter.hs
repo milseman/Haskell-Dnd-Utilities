@@ -12,35 +12,49 @@ module Dnd.DM.CombatTracker.CTInterpreter where
      e.g: sudo ln -s libncurses.so.5 libncurses.so
    -}
 
-
   -- | The commands available for the user to type in
   commands = [ "character", "monster", "effect", "damage", "delay", "next"
-             , "move", "remove", "swap", "update", "undo", "redo", "help" ]
+             , "move", "remove", "update", "help" ] -- ++ [ "undo", "redo" ]
+
+  -- todo: implement a general help functionality module, using pretty pringing,
+  -- key value pairs, CFGs, and other cool stuff.
 
   -- | Help documentation
-  help "meta"      = "  <pos>: before | after"
-                     ++ "\n  <(entry-)name|field>: String (no spaces)"
-                     ++ "\n  <initiative|hp|duration|turns|field>: Int"
-  help "help"      = "  Usage: help <command>"
-                     ++ "\n  Special: `help commands' lists all avaliable commands"
+  help "meta"      = "  <pos>                                = before | after\n"
+                  ++ "  <(entry-)name|field>                 = String (no spaces)\n"
+                  ++ "  <initiative|hp|duration|turns|field> = Int"
+  help "help"      = "  Usage: help <command>\n"
+                  ++ "  Special: `help commands' lists all avaliable commands\n"
+                  ++ "  Special: `help meta' shows the meta help (basically as a CFG)"
   help "commands"  = "Avaliable commands: \n  " ++ concatMap (\c -> c++", ") commands
-                     ++ "\nUse `help <command>' to see help on a particular command"
-  help "character" = "  Usage: character <name> <initiative> [<pos> <entry-name>]"
-                     ++ "\n  Default: insert according to provided initiative"
-  help "monster"   = "  Usage: monster <name> <initiative> <hp> [<pos> <entry-name>]"
-                     ++ "\n  Default: insert according to provided initiative"
-  help "effect"    = "  Usage: effect <name> <duration> [<pos> <entry-name>]"
-                     ++ "\n  Default: insert after what's on top"
-  help "damage"    = "  Usage: damage <name> <hp>"
-  help "delay"     = "  Usage: delay <entry-name>"
-  help "next"      = "  Usage: next [<turns>]"
-                     ++ "\n  Default: 1"
-  help "move"      = "  Usage: move <name> <pos> <name>"
-  help "remove"    = "  Usage: remove"
-  help "swap"      = "  Usage: swap <name> <name>"
-  help "update"    = "  Usage: update <name> <field> <value>"
-  help "undo"      = "  Usage: undo <turns> !! Not yet available"
-  help "redo"      = "  Usage: redo <turns> !! Not yet available"
+                  ++ "\n Use `help <command>' to see help on a particular command"
+  help "character" = "  Description: Add a character to combat\n"
+                  ++ "  Usage: character <name> <initiative> [<pos> <entry-name>]\n"
+                  ++ "  Default: insert according to provided initiative"
+  help "monster"   = "  Description: Add a monster to combat\n"
+                  ++ "  Usage: monster <name> <initiative> <hp> [<pos> <entry-name>]\n"
+                  ++ "  Default: insert according to provided initiative"
+  help "effect"    = "  Description: Add an effect with a duration to combat\n"
+                  ++ "  Usage: effect <name> <duration> [<pos> <entry-name>]\n"
+                  ++ "  Default: insert after what's on top"
+  help "damage"    = "  Description: Deal hp damage to a monster\n"
+                  ++ "  Usage: damage <name> <hp>"
+  help "delay"     = "  Description: delay until after another combat entry\n"
+                  ++ "  Usage: delay <entry-name>"
+  help "next"      = "  Description: advance combat\n"
+                  ++ "  Usage: next [<turns>]\n"
+                  ++ "  Default: 1"
+  help "move"      = "  Description: Move one entry to before or after another\n"
+                  ++ "  Usage: move <name> <pos> <name>"
+  help "remove"    = "  Description: Remove an entry from combat\n"
+                  ++ "  Usage: remove"
+  help "update"    = "  Description: Update a field for an entry, adds it if missing\n"
+                  ++ "  Usage: update <name> <field> <value>"
+  help "removeField" = "  Description: Removes a field from an entry, if it exists\n"
+                    ++ "  Usage: removeField <name> <field>"
+
+  -- help "undo"      = "  Usage: undo <turns> !! Not yet available"
+  -- help "redo"      = "  Usage: redo <turns> !! Not yet available"
   help ""          = help "help"
   help c           = "Error: command `" ++ c ++ "' not found\n" ++ help "commands"
 
@@ -74,12 +88,12 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   commandHandler "next" [] = echo ""
   commandHandler "move" [n,pos,n2]= echo ""
   commandHandler "remove" [n] = echo ""
-  commandHandler "swap" [n,n2] = echo ""
   commandHandler "update" [n,field,val] = echo ""
-  commandHandler "undo" [i] = echo ""
-  commandHandler "undo" []  = echo""
-  commandHandler "redo" [i] = echo ""
-  commandHandler "redo" []  = echo""
+  commandHandler "removeField" [n,field] = echo ""
+  -- commandHandler "undo" [i] = echo ""
+  -- commandHandler "undo" []  = echo""
+  -- commandHandler "redo" [i] = echo ""
+  -- commandHandler "redo" []  = echo""
   commandHandler "help" [c] = echo $ help c
   commandHandler "help" [] = echo $ help "help"
   commandHandler c _ = putStrLn $ "Error: ill-formed command\n" ++ help c
