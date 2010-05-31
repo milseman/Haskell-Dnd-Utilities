@@ -17,7 +17,7 @@ module Data.Wheel where
   data Position = Before | After
 
   -- | Runtime exception for when no entry matches a given predicate
-  unsatisfiedPredicate = error "Unsatisfied predicate"
+  unsatisfiedPredicate = error "Unsatisfied Predicate"
 
   -- | Top of the wheel
   top :: Wheel a -> a
@@ -57,6 +57,11 @@ module Data.Wheel where
                                      else e : insertW p x Before es
           insertW p x After (e:es)  = if p e then e : x : es
                                       else e : insertW p x After es
+
+  -- | As insertAt, but if predicate is never satisfied, insert at end
+  insertAtElseEnd :: Predicate a -> a -> Position -> Wheel a -> Wheel a
+  insertAtElseEnd p x pos w = if any p w then insertAt p x pos w
+                                   else (w ++ [x])
 
   -- | Move the top element to given position relative to the first element to satisfy
   -- the predicate. Throws unsatisfiedPredicate
