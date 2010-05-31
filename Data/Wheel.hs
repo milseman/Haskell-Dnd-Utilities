@@ -17,7 +17,7 @@ module Data.Wheel where
   data Position = Before | After
 
   -- | Runtime exception for when no entry matches a given predicate
-  unsatisfiedPredicate = error "Unsatisfied Predicate"
+  unsatisfiedPredicate = throw $ ErrorCall "Unsatisfied Predicate"
 
   -- | Top of the wheel
   top :: Wheel a -> a

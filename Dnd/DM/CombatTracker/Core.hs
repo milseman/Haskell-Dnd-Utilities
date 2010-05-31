@@ -27,7 +27,7 @@ module Dnd.DM.CombatTracker.Core where
   type CombatAction = CombatWheel -> CombatWheel
 
   -- | Runtime exception for when a specified entry is not found
-  entryNotFound = error "Entry Not Found"
+  entryNotFound = throw $ ErrorCall "Entry Not Found"
 
   -- | Combat wheel
   combat :: CombatWheel

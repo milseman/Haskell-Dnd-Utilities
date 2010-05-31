@@ -2,6 +2,8 @@ module Data.AssocList where
 
   import Data.List
   import Data.List.Utils
+  import Control.Exception
+  import Data.Dynamic
 
   -- | Library of Association List functions and utilities.
   -- An Association List is a list of key,value pairs
@@ -11,8 +13,8 @@ module Data.AssocList where
   type AssocList a b = [(a,b)]
 
   -- | Runtime exception for when an entry is not found
-  notFound = error "Nonexistant Key"    
-    
+  notFound = throw $ ErrorCall "Nonexistant Key"
+
   -- | Add, removing any existing pair with the same key
   add :: Eq  key => [(key, elt)] -> key -> elt -> [(key, elt)]
   add = addToAL
