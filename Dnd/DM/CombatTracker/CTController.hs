@@ -25,12 +25,13 @@ module Dnd.DM.CombatTracker.CTController where
                | Damage Name HP | Heal Name HP
                | Delay Name
                | Next Turns | NextImplicit
---               | Move Name Pos Name
---               | Remove Name
---               | Swap Name Name
---               | Update Name Field Value
+               | Move Name Pos Name
+               | Remove Name
+               | Update Name Field Value | RemoveField Name Field
 --               | Undo Turns | UndoImplicit | Redo Turns | RedoImplicit
 
+
+  -- todo: find a good way/place to verify presence before attempting to perform action
 
   -- | Dispatch from a Command to modify the combat state
   controller :: Command -> CombatState
@@ -48,6 +49,10 @@ module Dnd.DM.CombatTracker.CTController where
   controller (Delay name) = modify $ delay name
   controller (NextImplicit) = modify $ advance
   controller (Next turns) = modify $ applyN turns advance
+  controller (Move name pos name2) = modify $ move name pos name2
+  controller (Remove name) = modify $ remove name
+  controller (Update name field value) = modify $ updateField name field value
+  controller (RemoveField name field) = modify $ removeField name field
 
   -- todo add other commands
 
