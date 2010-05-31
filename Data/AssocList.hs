@@ -6,9 +6,12 @@ module Data.AssocList where
   -- | Library of Association List functions and utilities.
   -- An Association List is a list of key,value pairs
   -- (todo: enforce uniqueness at every step)
-  -- This is mainly an extension of Data.List.Utils, provided in the missingh libraries
+  -- This is mainly an extension of Data.List.Utils, provided in "missingh"
 
   type AssocList a b = [(a,b)]
+
+  -- | Runtime exception for when an entry is not found
+  notFound = error "Nonexistant Key"    
     
   -- | Add, removing any existing pair with the same key
   add :: Eq  key => [(key, elt)] -> key -> elt -> [(key, elt)]
@@ -33,6 +36,7 @@ module Data.AssocList where
   hasKey :: Eq a => a -> [(a, b)] -> Bool
   hasKey = hasKeyAL
 
-  -- | Partial function for lookup, will throw a runtime exception if not found
+  -- | Partial function for lookup. Throws notFound if not found
   unsafeFetch :: Eq a => a -> [(a, b)] -> b
   unsafeFetch k w = case lookup k w of Just v -> v
+                                       Nothing -> notFound
