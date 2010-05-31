@@ -4,6 +4,7 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   import Dnd.DM.CombatTracker.CTController
 
   import qualified Data.List as L
+  import Control.Monad.State
   import System.Console.Readline -- require haskell readline package
 
   {- Note for those trying to install haskell-readline on Arch:
@@ -25,7 +26,7 @@ module Dnd.DM.CombatTracker.CTInterpreter where
                   ++ "  <initiative|hp|duration|turns|field> = Int"
   help "help"      = "  Usage: help <command>\n"
                   ++ "  Special: `help commands' lists all avaliable commands\n"
-                  ++ "  Special: `help meta' shows the meta help (basically as a CFG)"
+                  ++ "  Special: `help meta' shows the meta help"
   help "commands"  = "Avaliable commands: \n  " ++ concatMap (\c -> c++", ") commands
                   ++ "\n Use `help <command>' to see help on a particular command"
   help "character" = "  Description: Add a character to combat\n"
@@ -61,20 +62,25 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   -- | Interpreter
 
   -- | Execute the program
+  main :: IO ()
   main = do initialStuff
-            repl
+            runStateT repl combat
+            return ()
 
   -- | Read-eval-print loop
-  repl = do ln <- readline ">> "
-            case ln of Just s -> do { addHistory s; interpret s; repl }
+  repl :: CombatState
+  repl = do ln <- liftIO $ readline ">> "
+            case ln of Just s -> do { (io . addHistory) s; interpret s; repl }
                        Nothing -> return () -- EOF
 
   -- | Interpret a line
-  interpret "" = putStrLn $ "Please enter a command\n" ++ help "commands"
+  interpret :: String -> CombatState
+  interpret "" = echo $ "Please enter a command\n" ++ help "commands"
   interpret s = if command `elem` commands then commandHandler command args
-                else putStrLn $ help command
+                else echo $ help command
     where (command:args) = words s
 
+  commandHandler :: String -> [String] -> CombatState
   commandHandler "character" [n,init,pos,n2] = echo ""
   commandHandler "character" [n,init] = echo ""
   commandHandler "monster" [n,init,hp,pos,n2] = echo ""
@@ -83,7 +89,7 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   commandHandler "effect" [n,dur] = echo ""
   commandHandler "damage" [n,dam] = echo ""
   commandHandler "delay" [n] = echo ""
-  commandHandler "next" [i] | (head i == '-') = putStrLn $ "Error: negative number"
+  commandHandler "next" [i] | (head i == '-') = echo "Error: negative number"
   commandHandler "next" [i] = echo ""
   commandHandler "next" [] = echo ""
   commandHandler "move" [n,pos,n2]= echo ""
@@ -96,13 +102,20 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   -- commandHandler "redo" []  = echo""
   commandHandler "help" [c] = echo $ help c
   commandHandler "help" [] = echo $ help "help"
-  commandHandler c _ = putStrLn $ "Error: ill-formed command\n" ++ help c
+  commandHandler c _ = echo $ "Error: ill-formed command\n" ++ help c
 
   -- | Echo what is read
-  echo = putStrLn
+  echo :: String -> CombatState
+  echo = io . putStrLn
 
   -- | Take care of any initializations (right now just welcome the individual)
+  initialStuff :: IO ()
   initialStuff = do welcome
 
   -- | Welcome the individual
+  welcome :: IO ()
   welcome = putStrLn "Interpreter for the CombatTracker system"
+
+  -- | Lift into a CombatState
+  io :: IO () -> CombatState
+  io = liftIO
