@@ -1,19 +1,18 @@
 module Dnd.DM.CombatTracker.CTController where
-  import qualified Data.Wheel as W
+  import Data.Wheel
   import Dnd.DM.CombatTracker.Core
 
   import Control.Monad.State
 
   type Name = String
   type Field = String
-  type Pos = W.Position
+  type Pos = Position
 
   type Duration = Int
   type Init = Int
   type HP = Int
   type Turns = Int
   type Value = Int
-
 
   -- | Combat state
   type CombatState = StateT CombatWheel IO ()
@@ -31,21 +30,22 @@ module Dnd.DM.CombatTracker.CTController where
 --               | Undo Turns | UndoImplicit | Redo Turns | RedoImplicit
 
 
-  -- todo: find a good way/place to verify presence before attempting to perform action
+  -- todo: find a good way/place to verify before attempting an action
 
   -- | Dispatch from a Command to modify the combat state
   controller :: Command -> CombatState
   controller (CharacterImplicit name init) = modify $ addCharacter name init
   controller (Character name init pos name2) =
-    modify $ W.insertAt (isEntry name2) (createCharacter name init) pos
+    modify $ insertAt (isEntry name2) (createCharacter name init) pos
   controller (MonsterImplicit name init hp) = modify $ addMonster name init hp
   controller (Monster name init hp pos name2) =
-    modify $ W.insertAt (isEntry name2) (createMonster name init hp) pos
+    modify $ insertAt (isEntry name2) (createMonster name init hp) pos
   controller (EffectImplicit name duration) =
-    modify $ \w -> addEffect name duration W.After (fst (head w)) w
+    modify $ \w -> addEffect name duration After (fst (head w)) w
   controller (Effect name duration pos name2) =
     modify $ addEffect name duration pos name2
   controller (Damage name hp) = modify $ damage name hp
+  controller (Heal name hp) = modify $ heal name hp
   controller (Delay name) = modify $ delay name
   controller (NextImplicit) = modify $ advance
   controller (Next turns) = modify $ applyN turns advance
@@ -55,7 +55,6 @@ module Dnd.DM.CombatTracker.CTController where
   controller (RemoveField name field) = modify $ removeField name field
 
   -- todo add other commands
-
 
   -- Applys the nth composition of f to x
   -- undefined for negative n

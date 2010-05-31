@@ -149,8 +149,8 @@ module Dnd.DM.CombatTracker.Core where
   alDoc [] = text "[]"
 
   -- | Pretty Print a combat wheel
-  pp :: CombatWheel -> IO()
-  pp = putStrLn . P.render . combatDoc
+  pp :: CombatWheel -> String
+  pp = P.render . combatDoc
 
 
   -- | Utility functions

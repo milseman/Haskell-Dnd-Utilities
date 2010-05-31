@@ -1,8 +1,9 @@
 module Dnd.DM.CombatTracker.CTInterpreter where
-  import qualified Data.Wheel as W
+  import Data.Wheel
   import Dnd.DM.CombatTracker.Core
   import Dnd.DM.CombatTracker.CTController
 
+  import Data.Char
   import qualified Data.List as L
   import Control.Monad.State
   import System.Console.Readline -- require haskell readline package
@@ -19,6 +20,8 @@ module Dnd.DM.CombatTracker.CTInterpreter where
 
   -- todo: implement a general help functionality module, using pretty pringing,
   -- key value pairs, CFGs, and other cool stuff.
+
+  -- todo: implement error handling
 
   -- | Help documentation
   help "meta"      = "  <pos>                                = before | after\n"
@@ -40,6 +43,8 @@ module Dnd.DM.CombatTracker.CTInterpreter where
                   ++ "  Default: insert after what's on top"
   help "damage"    = "  Description: Deal hp damage to a monster\n"
                   ++ "  Usage: damage <name> <hp>"
+  help "heal"      = "  Description: Heal hp damage to a monster\n"
+                  ++ "  Usage: heal <name> <hp>"
   help "delay"     = "  Description: delay until after another combat entry\n"
                   ++ "  Usage: delay <entry-name>"
   help "next"      = "  Description: advance combat\n"
@@ -69,7 +74,14 @@ module Dnd.DM.CombatTracker.CTInterpreter where
 
   -- | Read-eval-print loop
   repl :: CombatState
-  repl = do ln <- liftIO $ readline ">> "
+  repl = do w <- get
+            echo ""
+            echo "--------------------"
+            echo $ pp w
+            echo "--------------------"
+            echo ""
+            ln <- liftIO $ readline ">> "
+            echo ""
             case ln of Just s -> do { (io . addHistory) s; interpret s; repl }
                        Nothing -> return () -- EOF
 
@@ -81,21 +93,26 @@ module Dnd.DM.CombatTracker.CTInterpreter where
     where (command:args) = words s
 
   commandHandler :: String -> [String] -> CombatState
-  commandHandler "character" [n,init,pos,n2] = echo ""
-  commandHandler "character" [n,init] = echo ""
-  commandHandler "monster" [n,init,hp,pos,n2] = echo ""
-  commandHandler "monster" [n,init,hp] = echo ""
-  commandHandler "effect" [n,dur,pos,n2] = echo ""
-  commandHandler "effect" [n,dur] = echo ""
-  commandHandler "damage" [n,dam] = echo ""
-  commandHandler "delay" [n] = echo ""
+  commandHandler "character" [n,init,pos,n2] =
+    controller $ Character n (read init) (readPos pos) n2
+  commandHandler "character" [n,init] = controller $ CharacterImplicit n (read init)
+  commandHandler "monster" [n,init,hp,pos,n2] =
+    controller $ Monster n (read init) (read hp) (readPos pos) n2
+  commandHandler "monster" [n,init,hp] =
+    controller $ MonsterImplicit n (read init) (read hp)
+  commandHandler "effect" [n,dur,pos,n2] =
+    controller $ Effect n (read dur) (readPos pos) n2
+  commandHandler "effect" [n,dur] = controller $ EffectImplicit n (read dur)
+  commandHandler "damage" [n,dam] = controller $ Damage n (read dam)
+  commandHandler "heal" [n,hp] = controller $ Heal n (read hp)
+  commandHandler "delay" [n] = controller $ Delay n
   commandHandler "next" [i] | (head i == '-') = echo "Error: negative number"
-  commandHandler "next" [i] = echo ""
-  commandHandler "next" [] = echo ""
-  commandHandler "move" [n,pos,n2]= echo ""
-  commandHandler "remove" [n] = echo ""
-  commandHandler "update" [n,field,val] = echo ""
-  commandHandler "removeField" [n,field] = echo ""
+  commandHandler "next" [i] = controller . Next $ read i
+  commandHandler "next" [] = controller  $ NextImplicit
+  commandHandler "move" [n,pos,n2]= controller $ Move n (readPos pos) n2
+  commandHandler "remove" [n] = controller $ Remove n
+  commandHandler "update" [n,field,val] = controller $ Update n field (read val)
+  commandHandler "removeField" [n,field] = controller $ RemoveField n field
   -- commandHandler "undo" [i] = echo ""
   -- commandHandler "undo" []  = echo""
   -- commandHandler "redo" [i] = echo ""
@@ -119,3 +136,13 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   -- | Lift into a CombatState
   io :: IO () -> CombatState
   io = liftIO
+
+  -- | Read in a position
+  readPos :: String -> Position
+  readPos s = case canonicalize s of
+                "Before" -> Before
+                "After" -> After
+
+  -- | Canonicalize a string
+  canonicalize (c:cs) = toUpper c : map toLower cs
+  canonicalize "" = ""
