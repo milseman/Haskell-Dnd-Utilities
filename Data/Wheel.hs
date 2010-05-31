@@ -57,9 +57,9 @@ module Data.Wheel where
   -- | Move the top element to given position relative to the first element to satisfy
   -- the predicate
   -- If no element satisfies the predicate, stick at end
-  move :: Predicate a -> Position -> Wheel a -> Wheel a
-  move p pos (x:xs) = insertAt p x pos xs
-  move _ _ [] = []
+  moveTo :: Predicate a -> Position -> Wheel a -> Wheel a
+  moveTo p pos (x:xs) = insertAt p x pos xs
+  moveTo _ _ [] = []
 
   -- | Process an element and advance.
   -- The supplied funtion takes the top of the wheel, and returns a new element
