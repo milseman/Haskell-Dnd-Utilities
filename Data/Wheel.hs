@@ -16,6 +16,9 @@ module Data.Wheel where
 
   data Position = Before | After
 
+  -- | Runtime exception for when no entry matches a given predicate
+  unsatisfiedPredicate = error "Unsatisfied predicate"
+
   -- | Top of the wheel
   top :: Wheel a -> a
   top = head
@@ -34,7 +37,7 @@ module Data.Wheel where
   -- If no element satisfies, no rotation occurs.
   -- rotM: rotation method to use until p satisfies
   rotateUntil :: Rotation a -> Predicate a -> Wheel a -> Wheel a
-  rotateUntil rotM p w = checkFirst p w $ safeRotateUntil rotM p w
+  rotateUntil rotM p w = check p w $ safeRotateUntil rotM p w
     where safeRotateUntil rotM p w = if p (top w) then w
                                             else safeRotateUntil rotM p (rotM w)
 
@@ -47,19 +50,18 @@ module Data.Wheel where
   backwardUntil = rotateUntil backward
 
   -- | Insert an item at given position relative to the first element to satisfy
-  -- the predicate.
-  -- If no element satisfies the predicate, stick at end
+  -- the predicate. Throws unsatisfiedPredicate
   insertAt :: Predicate a -> a -> Position -> Wheel a -> Wheel a
-  insertAt p x pos [] = [x]
-  insertAt p x Before (e:es) = if p e then x : e : es else e : insertAt p x Before es
-  insertAt p x After (e:es)  = if p e then e : x : es else e : insertAt p x After es
+  insertAt p x pos w = check p w $ insertW p x pos w
+    where insertW p x Before (e:es) = if p e then x : e : es
+                                     else e : insertW p x Before es
+          insertW p x After (e:es)  = if p e then e : x : es
+                                      else e : insertW p x After es
 
   -- | Move the top element to given position relative to the first element to satisfy
-  -- the predicate
-  -- If no element satisfies the predicate, stick at end
+  -- the predicate. Throws unsatisfiedPredicate
   moveTo :: Predicate a -> Position -> Wheel a -> Wheel a
-  moveTo p pos (x:xs) = insertAt p x pos xs
-  moveTo _ _ [] = []
+  moveTo p pos w = check p w $ insertAt p (head w) pos (tail w)
 
   -- | Process an element and advance.
   -- The supplied funtion takes the top of the wheel, and returns a new element
@@ -68,18 +70,15 @@ module Data.Wheel where
   process f (x:xs) = forward $ f x : xs
   process f [] = []
 
-  -- | Replace the first entry matching the predicate with the new entry
-  -- If no entries match, the original wheel is returned
+  -- | Replace the first entry matching the predicate with the new entry.
+  -- Throws unsatisfiedPredicate
   replace :: a -> (a -> Bool) -> Wheel a -> Wheel a
-  replace new p w = case break p w of (left, r:rs) -> left ++ (new:rs)
-                                      (left, []) -> left
+  replace new p w = check p w $ case break p w of (left, r:rs) -> left ++ (new:rs)
 
-  -- Internal helper: see if no one in the wheel satisfies
-  none :: Predicate a -> Wheel a -> Bool
-  none p w = not $ any p w
-
-  -- Internal helper: Control flow construct that returns argument wheel when
-  -- none satisfy, else continues to perform operation.
-  -- Relies on laziness
-  checkFirst :: Predicate a -> Wheel a -> Wheel a -> Wheel a
-  checkFirst p operation w = if none p w then w else operation
+  -- Internal helper: Make sure an element exists that satisfies the predicate
+  -- If none do, throw "Unsatisfied predicate"
+  -- Takes advantage of laziness to implement control flow what wont evaluate
+  -- the second argument if p is never satisfied
+  check :: Predicate a -> Wheel a -> Wheel a -> Wheel a
+  check p w safeW | any p w = safeW
+  check _ _ _ = unsatisfiedPredicate
