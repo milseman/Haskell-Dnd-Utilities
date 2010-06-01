@@ -1,11 +1,14 @@
 module Dnd.DM.CombatTracker.CTInterpreter where
   import Data.Wheel
-  import Dnd.DM.CombatTracker.Core
+  import Dnd.DM.CombatTracker.Core as Core
   import Dnd.DM.CombatTracker.CTController
 
   import Data.Char
   import qualified Data.List as L
   import Control.Monad.State
+  import Control.Monad.Error.Class
+  import Control.Exception as E
+  import Control.Monad.Error
   import System.Console.Readline -- require haskell readline package
 
   {- Note for those trying to install haskell-readline on Arch:
@@ -15,8 +18,8 @@ module Dnd.DM.CombatTracker.CTInterpreter where
    -}
 
   -- | The commands available for the user to type in
-  commands = [ "character", "monster", "effect", "damage", "delay", "next"
-             , "move", "remove", "update", "help" ] -- ++ [ "undo", "redo" ]
+  commands = [ "character", "monster", "effect", "damage", "heal", "delay", "next"
+             , "move", "remove", "update", "show", "help" ] -- ++ [ "undo", "redo" ]
 
   -- todo: implement a general help functionality module, using pretty pringing,
   -- key value pairs, CFGs, and other cool stuff.
@@ -58,6 +61,8 @@ module Dnd.DM.CombatTracker.CTInterpreter where
                   ++ "  Usage: update <name> <field> <value>"
   help "removeField" = "  Description: Removes a field from an entry, if it exists\n"
                     ++ "  Usage: removeField <name> <field>"
+  help "show"        = "  Description: Show the current combat state\n"
+                    ++ "  Usage: show"
 
   -- help "undo"      = "  Usage: undo <turns> !! Not yet available"
   -- help "redo"      = "  Usage: redo <turns> !! Not yet available"
@@ -67,19 +72,14 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   -- | Interpreter
 
   -- | Execute the program
-  main :: IO ()
+
   main = do initialStuff
-            runStateT repl combat
-            return ()
+            e <- runErrorT $ runStateT repl Core.combat
+            putStrLn "Exiting..."
 
   -- | Read-eval-print loop
   repl :: CombatState
   repl = do w <- get
-            echo ""
-            echo "--------------------"
-            echo $ pp w
-            echo "--------------------"
-            echo ""
             ln <- liftIO $ readline ">> "
             echo ""
             case ln of Just s -> do { (io . addHistory) s; interpret s; repl }
@@ -88,7 +88,14 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   -- | Interpret a line
   interpret :: String -> CombatState
   interpret "" = echo $ "Please enter a command\n" ++ help "commands"
-  interpret s = if command `elem` commands then commandHandler command args
+  interpret s = if command `elem` commands then
+                  do w <- get
+                     do { commandHandler command args
+                        ; res <- get
+                        ; echo ""
+                        ; echo $ pp res
+                        ; echo ""
+                        } `catchError` (\e -> do {io (putStrLn e); modify (\_ -> w)})
                 else echo $ help command
     where (command:args) = words s
 
@@ -117,9 +124,10 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   -- commandHandler "undo" []  = echo""
   -- commandHandler "redo" [i] = echo ""
   -- commandHandler "redo" []  = echo""
-  commandHandler "help" [c] = echo $ help c
-  commandHandler "help" [] = echo $ help "help"
-  commandHandler c _ = echo $ "Error: ill-formed command\n" ++ help c
+  commandHandler "show" [] = do modify id
+  commandHandler "help" [c] = throwError $ help c
+  commandHandler "help" [] = throwError $ help "help"
+  commandHandler c _ = throwError $ "Error: ill-formed command\n" ++ help c
 
   -- | Echo what is read
   echo :: String -> CombatState
@@ -142,6 +150,14 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   readPos s = case canonicalize s of
                 "Before" -> Before
                 "After" -> After
+
+  -- | Handle exceptions
+
+  -- handler :: CombatState -> CombatState
+  -- handler c = catchError c handleErrorCall
+
+  -- handleErrorCall :: SomeException -> CombatState
+  -- handleErrorCall e = do io $ putStrLn e
 
   -- | Canonicalize a string
   canonicalize (c:cs) = toUpper c : map toLower cs

@@ -1,5 +1,6 @@
 module Data.Wheel where
   import Data.List
+  import Control.Exception
 
   -- | Library providing the wheel data structure, and many useful functions
   -- A Wheel is a list that rotates around, and elements can be inserted,
@@ -37,7 +38,7 @@ module Data.Wheel where
   -- If no element satisfies, no rotation occurs.
   -- rotM: rotation method to use until p satisfies
   rotateUntil :: Rotation a -> Predicate a -> Wheel a -> Wheel a
-  rotateUntil rotM p w = check p w $ safeRotateUntil rotM p w
+  rotateUntil rotM p w = checkWheel p w $ safeRotateUntil rotM p w
     where safeRotateUntil rotM p w = if p (top w) then w
                                             else safeRotateUntil rotM p (rotM w)
 
@@ -52,7 +53,7 @@ module Data.Wheel where
   -- | Insert an item at given position relative to the first element to satisfy
   -- the predicate. Throws unsatisfiedPredicate
   insertAt :: Predicate a -> a -> Position -> Wheel a -> Wheel a
-  insertAt p x pos w = check p w $ insertW p x pos w
+  insertAt p x pos w = checkWheel p w $ insertW p x pos w
     where insertW p x Before (e:es) = if p e then x : e : es
                                      else e : insertW p x Before es
           insertW p x After (e:es)  = if p e then e : x : es
@@ -66,7 +67,7 @@ module Data.Wheel where
   -- | Move the top element to given position relative to the first element to satisfy
   -- the predicate. Throws unsatisfiedPredicate
   moveTo :: Predicate a -> Position -> Wheel a -> Wheel a
-  moveTo p pos w = check p w $ insertAt p (head w) pos (tail w)
+  moveTo p pos w = checkWheel p w $ insertAt p (head w) pos (tail w)
 
   -- | Process an element and advance.
   -- The supplied funtion takes the top of the wheel, and returns a new element
@@ -78,12 +79,13 @@ module Data.Wheel where
   -- | Replace the first entry matching the predicate with the new entry.
   -- Throws unsatisfiedPredicate
   replace :: a -> (a -> Bool) -> Wheel a -> Wheel a
-  replace new p w = check p w $ case break p w of (left, r:rs) -> left ++ (new:rs)
+  replace new p w =
+    checkWheel p w $ case break p w of (left, r:rs) -> left ++ (new:rs)
 
   -- Internal helper: Make sure an element exists that satisfies the predicate
   -- If none do, throw "Unsatisfied predicate"
   -- Takes advantage of laziness to implement control flow what wont evaluate
   -- the second argument if p is never satisfied
-  check :: Predicate a -> Wheel a -> Wheel a -> Wheel a
-  check p w safeW | any p w = safeW
-  check _ _ _ = unsatisfiedPredicate
+  checkWheel :: Predicate a -> Wheel a -> Wheel a -> Wheel a
+  checkWheel p w safeW | any p w = safeW
+  checkWheel _ _ _ = unsatisfiedPredicate
