@@ -78,7 +78,7 @@
   -- Checks for existance before undertaking an operation. Integrates with CombatState
   check :: EntryName -> CombatWheel -> CombatState -> CombatState
   check e w c | any (isEntry e) w = c
-  check e _ _ = throwError "Entry Not Found"
+  check e _ _ = throwError $ "Entry `" ++ e ++ "' Not Found"
 
 
   -- Applys the nth composition of f to x
