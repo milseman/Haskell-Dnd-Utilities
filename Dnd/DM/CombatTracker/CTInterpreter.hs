@@ -27,12 +27,16 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   -- todo: implement error handling
 
   -- | Help documentation
+  help "all"       = concatMap (\c -> if c /= "all" then c ++ "\n" ++ help c ++ "\n\n"
+                                      else ""
+                               ) commands
   help "meta"      = "  <pos>                                = before | after\n"
                   ++ "  <(entry-)name|field>                 = String (no spaces)\n"
                   ++ "  <initiative|hp|duration|turns|field> = Int"
   help "help"      = "  Usage: help <command>\n"
                   ++ "  Special: `help commands' lists all avaliable commands\n"
-                  ++ "  Special: `help meta' shows the meta help"
+                  ++ "  Special: `help meta' shows the meta help\n"
+                  ++ "  Special: `help all' shows all the command's help"                     
   help "commands"  = "Avaliable commands: \n  " ++ concatMap (\c -> c++", ") commands
                   ++ "\n Use `help <command>' to see help on a particular command"
   help "character" = "  Description: Add a character to combat\n"
@@ -100,25 +104,30 @@ module Dnd.DM.CombatTracker.CTInterpreter where
     where (command:args) = words s
 
   commandHandler :: String -> [String] -> CombatState
-  commandHandler "character" [n,init,pos,n2] =
+  commandHandler "character" [n,init,pos,n2] | areNumbers [init] =
     controller $ Character n (read init) (readPos pos) n2
-  commandHandler "character" [n,init] = controller $ CharacterImplicit n (read init)
-  commandHandler "monster" [n,init,hp,pos,n2] =
+  commandHandler "character" [n,init] | areNumbers [init] =
+    controller $ CharacterImplicit n (read init)
+  commandHandler "monster" [n,init,hp,pos,n2] | areNumbers [init, hp]=
     controller $ Monster n (read init) (read hp) (readPos pos) n2
-  commandHandler "monster" [n,init,hp] =
+  commandHandler "monster" [n,init,hp] | areNumbers [init, hp]=
     controller $ MonsterImplicit n (read init) (read hp)
-  commandHandler "effect" [n,dur,pos,n2] =
+  commandHandler "effect" [n,dur,pos,n2] | areNumbers [dur] =
     controller $ Effect n (read dur) (readPos pos) n2
-  commandHandler "effect" [n,dur] = controller $ EffectImplicit n (read dur)
-  commandHandler "damage" [n,dam] = controller $ Damage n (read dam)
-  commandHandler "heal" [n,hp] = controller $ Heal n (read hp)
+  commandHandler "effect" [n,dur] | areNumbers [dur] =
+    controller $ EffectImplicit n (read dur)
+  commandHandler "damage" [n,dam] | areNumbers [dam] =
+    controller $ Damage n (read dam)
+  commandHandler "heal" [n,hp] | areNumbers [hp] =
+    controller $ Heal n (read hp)
   commandHandler "delay" [n] = controller $ Delay n
+  commandHandler "next" [i] | areNumbers [i] = controller . Next $ read i
   commandHandler "next" [i] | (head i == '-') = echo "Error: negative number"
-  commandHandler "next" [i] = controller . Next $ read i
   commandHandler "next" [] = controller  $ NextImplicit
   commandHandler "move" [n,pos,n2]= controller $ Move n (readPos pos) n2
   commandHandler "remove" [n] = controller $ Remove n
-  commandHandler "update" [n,field,val] = controller $ Update n field (read val)
+  commandHandler "update" [n,field,val] | areNumbers [val] =
+    controller $ Update n field (read val)
   commandHandler "removeField" [n,field] = controller $ RemoveField n field
   -- commandHandler "undo" [i] = echo ""
   -- commandHandler "undo" []  = echo""
@@ -151,6 +160,13 @@ module Dnd.DM.CombatTracker.CTInterpreter where
                 "Before" -> Before
                 "After" -> After
 
+  -- | Predicate testing whether supplied strings can be safely read as numbers
+  -- Note that read erros on empty string, hence special cases for []
+  areNumbers :: [String] -> Bool
+  areNumbers [] = False
+  areNumbers ss = and $ map allDigits ss
+    where allDigits [] = False
+          allDigits s = and $ map isDigit s
   -- | Handle exceptions
 
   -- handler :: CombatState -> CombatState
