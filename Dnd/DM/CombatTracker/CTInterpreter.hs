@@ -19,7 +19,7 @@ module Dnd.DM.CombatTracker.CTInterpreter where
 
   -- | The commands available for the user to type in
   commands = [ "character", "monster", "effect", "damage", "heal", "delay", "next"
-             , "move", "remove", "update", "show", "help" ] -- ++ [ "undo", "redo" ]
+             , "move", "remove", "update", "show", "undo", "help" ] 
 
   -- todo: implement a general help functionality module, using pretty pringing,
   -- key value pairs, CFGs, and other cool stuff.
@@ -67,6 +67,8 @@ module Dnd.DM.CombatTracker.CTInterpreter where
                     ++ "  Usage: removeField <name> <field>"
   help "show"        = "  Description: Show the current combat state\n"
                     ++ "  Usage: show"
+  help "undo"        = "  Description: undo previous commands, restore the wheel\n"
+                    ++ "  Usage: undo [turns]"
 
   -- help "undo"      = "  Usage: undo <turns> !! Not yet available"
   -- help "redo"      = "  Usage: redo <turns> !! Not yet available"
@@ -78,7 +80,7 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   -- | Execute the program
 
   main = do initialStuff
-            e <- runErrorT $ runStateT repl Core.combat
+            e <- runErrorT $ runStateT repl [Core.combat]
             putStrLn "Exiting..."
 
   -- | Read-eval-print loop
@@ -97,7 +99,7 @@ module Dnd.DM.CombatTracker.CTInterpreter where
                      do { commandHandler command args
                         ; res <- get
                         ; echo ""
-                        ; echo $ pp res
+                        ; echo $ pp (head res)
                         ; echo ""
                         } `catchError` (\e -> do {io (putStrLn e); modify (\_ -> w)})
                 else echo $ help command
@@ -134,6 +136,8 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   -- commandHandler "redo" [i] = echo ""
   -- commandHandler "redo" []  = echo""
   commandHandler "show" [] = do modify id
+  commandHandler "undo" [] = controller UndoImplicit
+  commandHandler "undo" [i] | areNumbers [i] = controller $ Undo (read i)
   commandHandler "help" [c] = throwError $ help c
   commandHandler "help" [] = throwError $ help "help"
   commandHandler c _ = throwError $ "Error: ill-formed command\n" ++ help c
