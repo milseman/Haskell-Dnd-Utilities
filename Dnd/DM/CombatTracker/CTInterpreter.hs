@@ -19,7 +19,7 @@ module Dnd.DM.CombatTracker.CTInterpreter where
 
   -- | The commands available for the user to type in
   commands = [ "character", "monster", "effect", "damage", "heal", "delay", "next"
-             , "move", "remove", "update", "show", "undo", "help" ] 
+             , "move", "remove", "update", "show", "undo", "redo", "help" ]
 
   -- todo: implement a general help functionality module, using pretty pringing,
   -- key value pairs, CFGs, and other cool stuff.
@@ -36,7 +36,7 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   help "help"      = "  Usage: help <command>\n"
                   ++ "  Special: `help commands' lists all avaliable commands\n"
                   ++ "  Special: `help meta' shows the meta help\n"
-                  ++ "  Special: `help all' shows all the command's help"                     
+                  ++ "  Special: `help all' shows all the command's help"
   help "commands"  = "Avaliable commands: \n  " ++ concatMap (\c -> c++", ") commands
                   ++ "\n Use `help <command>' to see help on a particular command"
   help "character" = "  Description: Add a character to combat\n"
@@ -69,6 +69,10 @@ module Dnd.DM.CombatTracker.CTInterpreter where
                     ++ "  Usage: show"
   help "undo"        = "  Description: undo previous commands, restore the wheel\n"
                     ++ "  Usage: undo [turns]"
+  help "redo"        = "  Description: redo undid commands\n"
+                    ++ "  Usage: redo [turns]\n"
+                    ++ "  Note: Can only be used after undos. Any modification to"
+                     ++ " the wheel outside of undo will clear the redo stack"
 
   -- help "undo"      = "  Usage: undo <turns> !! Not yet available"
   -- help "redo"      = "  Usage: redo <turns> !! Not yet available"
@@ -80,7 +84,7 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   -- | Execute the program
 
   main = do initialStuff
-            e <- runErrorT $ runStateT repl [Core.combat]
+            e <- runErrorT $ runStateT repl ([Core.combat],[])
             putStrLn "Exiting..."
 
   -- | Read-eval-print loop
@@ -94,15 +98,16 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   -- | Interpret a line
   interpret :: String -> CombatState
   interpret "" = echo $ "Please enter a command\n" ++ help "commands"
-  interpret s = if command `elem` commands then
-                  do w <- get
-                     do { commandHandler command args
-                        ; res <- get
-                        ; echo ""
-                        ; echo $ pp (head res)
-                        ; echo ""
-                        } `catchError` (\e -> do {io (putStrLn e); modify (\_ -> w)})
-                else echo $ help command
+  interpret s =
+    if command `elem` commands
+    then do (w,r) <- get
+            do { commandHandler command args
+               ; (res,_) <- get
+               ; echo ""
+               ; echo $ pp (head res)
+               ; echo ""
+               } `catchError` (\e -> do {io (putStrLn e); modify (\_ -> (w,r))})
+    else echo $ help command
     where (command:args) = words s
 
   commandHandler :: String -> [String] -> CombatState
@@ -124,7 +129,7 @@ module Dnd.DM.CombatTracker.CTInterpreter where
     controller $ Heal n (read hp)
   commandHandler "delay" [n] = controller $ Delay n
   commandHandler "next" [i] | areNumbers [i] = controller . Next $ read i
-  commandHandler "next" [i] | (head i == '-') = echo "Error: negative number"
+  commandHandler "next" [i] | (head i == '-') = throwError "Error: negative number"
   commandHandler "next" [] = controller  $ NextImplicit
   commandHandler "move" [n,pos,n2]= controller $ Move n (readPos pos) n2
   commandHandler "remove" [n] = controller $ Remove n
@@ -138,6 +143,8 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   commandHandler "show" [] = do modify id
   commandHandler "undo" [] = controller UndoImplicit
   commandHandler "undo" [i] | areNumbers [i] = controller $ Undo (read i)
+  commandHandler "redo" [] = controller RedoImplicit
+  commandHandler "redo" [i] | areNumbers [i] = controller $ Redo (read i)
   commandHandler "help" [c] = throwError $ help c
   commandHandler "help" [] = throwError $ help "help"
   commandHandler c _ = throwError $ "Error: ill-formed command\n" ++ help c

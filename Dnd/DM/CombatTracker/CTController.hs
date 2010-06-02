@@ -19,8 +19,11 @@
   -- | A placed to stick error messages
   type CombatError = ErrorT String IO
 
+  -- | A recording of all of Combat, along with a redo stack
+  type CombatRecord = ([CombatWheel],[CombatWheel])
+
   -- | Combat state
-  type CombatState = StateT [CombatWheel] CombatError ()
+  type CombatState = StateT CombatRecord CombatError ()
 
   -- | Interpreter commands, Impl is for the implicit version of the command
   data Command = Character Name Init Pos Name  | CharacterImplicit Name Init
@@ -32,9 +35,7 @@
                | Move Name Pos Name
                | Remove Name
                | Update Name Field Value | RemoveField Name Field
-               | Undo Turns | UndoImplicit -- | Redo Turns | RedoImplicit
-               | Show
-
+               | Undo Turns | UndoImplicit | Redo Turns | RedoImplicit
 
   -- todo: find a good way/place to verify before attempting an action
 
@@ -43,41 +44,41 @@
   controller (CharacterImplicit name init) =
     record $ addCharacter name init
   controller (Character name init pos name2) =
-    do ws <- get
+    do (ws,_) <- get
        safeRecord [name2] ws $ addCharacterAt name init pos name2
   controller (MonsterImplicit name init hp) = record $ addMonster name init hp
   controller (Monster name init hp pos name2) =
-    do ws <- get
+    do (ws,_) <- get
        safeRecord [name2] ws $ addMonsterAt name init hp pos name2
   controller (EffectImplicit name duration) = record $ addEffect name duration
   controller (Effect name duration pos name2) =
-    do ws <- get
+    do (ws,_) <- get
        safeRecord [name2] ws $ addEffectAt name duration pos name2
   controller (Damage name hp) =
-    do ws <- get
+    do (ws,_) <- get
        safeRecord [name] ws $ damage name hp
   controller (Heal name hp) =
-    do ws <- get
+    do (ws,_) <- get
        safeRecord [name] ws $ heal name hp
   controller (Delay name) =
-    do ws <- get
+    do (ws,_) <- get
        safeRecord [name] ws $ delay name
-  controller (NextImplicit) = record $ advance
+  controller (NextImplicit) = controller $ Next 1
   controller (Next turns) = record $ applyN turns advance
   controller (Move name pos name2) =
-    do ws <- get
+    do (ws,_) <- get
        safeRecord [name, name2] ws $ move name pos name2
   controller (Remove name) = record $ remove name
   controller (Update name field value) =
-    do ws <- get
+    do (ws,_) <- get
        safeRecord [name] ws $ updateField name field value
   controller (RemoveField name field) =
-    do ws <- get
+    do (ws,_) <- get
        safeRecord [name] ws $ removeField name field
-  controller UndoImplicit = do { ws <- get ; safePop ws 1 }
-  controller (Undo i) = do { ws <- get ; safePop ws i }
-  -- Throws the current wheel, pretty printed (I might want to change this)
-  controller Show = do { ws <- get ; throwError (pp (head ws)) }
+  controller UndoImplicit = controller $ Undo 1
+  controller (Undo i) = do { (ws,_) <- get ; safeUndo ws i }
+  controller RedoImplicit = controller $ Redo 1
+  controller (Redo i) = do { (_,rs) <- get ; safeRedo rs i }
 
   -- todo add other commands
 
@@ -87,32 +88,24 @@
   checkPresence e _ _ = throwError $ "Entry `" ++ e ++ "' Not Found"
 
 
-
   -- Checks that history is adequately long before popping off i items
-  safePop :: [CombatWheel] -> Int -> CombatState
-  safePop ws i | length ws < i =
-    throwError $ "History only contains " ++ show (length ws) ++ " entries"
-  safePop ws i = modify $ \_ -> drop i ws
+  -- Pushes what's poped onto the redo stack
+  safeUndo :: [CombatWheel] -> Int -> CombatState
+  safeUndo ws i | length ws <= i =
+    throwError $ "History only contains " ++ show (length ws) ++ " entr" ++ suf
+      where suf = if (length ws) == 1 then "y" else "ies"
+  safeUndo ws i = modify $ \(_,rs) -> (drop i ws, reverse (take i ws) ++ rs)
 
+  safeRedo rs i | length rs < i =
+    throwError $ "Redo stack only contains " ++ show (length rs) ++ " entr" ++ suf
+      where suf = if (length rs) == 1 then "y" else "ies"
+  safeRedo rs i = modify $ \(ws,_) -> (reverse (take i rs) ++ ws, drop i rs)
 
   -- Applys the nth composition of f to x
   -- undefined for negative n
   applyN :: Int -> (a -> a) -> a -> a
   applyN n f x | n > 0 = applyN (n-1) f (f x)
   applyN 0 f x = x
-
-  -- catchNotFound :: CombatWheel -> (ErrorCall -> IO CombatWheel) -> IO CombatWheel
-  -- catchNotFound w h = E.catch (evaluate w) h
-
-  -- handleNotFound w (ErrorCall s) = do putStrLn s
-  --                                     return w
-
-  -- tester = do w <- execStateT (controller (Character "foo" 4 Before "bar")) combat
-  --             liftIO $ putStrLn $ pp $ w
-  --          `catchError` (\e -> liftIO ( putStrLn ("caught" ++ e)))
-  -- testShowable = do e <- runErrorT tester
-  --                   putStrLn $ case e of Left w -> w
-  --                                        Right _ -> ""
 
 
   -- Apply a function to the top element of a stack, and return its result pushed
@@ -124,7 +117,7 @@
   -- Perform an operation to the top of your state record, and record your result
   -- Record as in the verb. And is in what a VCR does. Not to be confused with the
   -- Haskell data structure.
-  record = modify . applyPush
+  record f = modify $ \(ws,_) -> (applyPush f ws, [])
 
   -- Record, but first checks that entries are present in the current wheel
   -- Safe as in safe with respect to entrynames being present
