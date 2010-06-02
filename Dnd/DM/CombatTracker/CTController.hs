@@ -42,14 +42,17 @@
   -- | Dispatch from a Command to modify the combat state
   controller :: Command -> CombatState
   controller (CharacterImplicit name init) =
-    record $ addCharacter name init
+    do (ws,_) <- get
+       safeRecordUnique name [] ws $ addCharacter name init
   controller (Character name init pos name2) =
     do (ws,_) <- get
-       safeRecord [name2] ws $ addCharacterAt name init pos name2
-  controller (MonsterImplicit name init hp) = record $ addMonster name init hp
+       safeRecordUnique name [name2] ws $ addCharacterAt name init pos name2
+  controller (MonsterImplicit name init hp) =
+    do (ws,_) <- get
+       safeRecordUnique name [] ws $ addMonster name init hp
   controller (Monster name init hp pos name2) =
     do (ws,_) <- get
-       safeRecord [name2] ws $ addMonsterAt name init hp pos name2
+       safeRecordUnique name [name2] ws $ addMonsterAt name init hp pos name2
   controller (EffectImplicit name duration) = record $ addEffect name duration
   controller (Effect name duration pos name2) =
     do (ws,_) <- get
@@ -87,6 +90,11 @@
   checkPresence e w c | any (isEntry e) w = c
   checkPresence e _ _ = throwError $ "Entry `" ++ e ++ "' Not Found"
 
+  -- Checks against the entry already existing
+  checkUnique :: EntryName -> CombatWheel -> CombatState -> CombatState
+  checkUnique e w _ | any (isEntry e) w =
+    throwError $ "Entry `" ++ e ++ "' Already Present"
+  checkUnique _ _ c = c
 
   -- Checks that history is adequately long before popping off i items
   -- Pushes what's poped onto the redo stack
@@ -117,6 +125,7 @@
   -- Perform an operation to the top of your state record, and record your result
   -- Record as in the verb. And is in what a VCR does. Not to be confused with the
   -- Haskell data structure.
+  record :: CombatAction -> CombatState
   record f = modify $ \(ws,_) -> (applyPush f ws, [])
 
   -- Record, but first checks that entries are present in the current wheel
@@ -125,3 +134,11 @@
   safeRecord :: [EntryName] -> [CombatWheel] -> (CombatAction) -> CombatState
   safeRecord (e:es) (w:ws) c = checkPresence e w $ safeRecord es (w:ws) c
   safeRecord [] ws c = record c
+
+  -- safeRecord, but ensures uniqueness of first argument
+  -- Throws Entry Already Present
+  safeRecordUnique :: EntryName -> [EntryName] -> [CombatWheel] -> (CombatAction)
+                   -> CombatState
+  safeRecordUnique n (e:es) (w:ws) c =
+    checkUnique n w $ checkPresence e w $ safeRecord es (w:ws) c
+  safeRecordUnique n [] (w:ws) c = checkUnique n w $ record c
