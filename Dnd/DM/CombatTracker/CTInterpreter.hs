@@ -106,7 +106,7 @@ module Dnd.DM.CombatTracker.CTInterpreter where
                ; echo ""
                ; echo $ pp (head res)
                ; echo ""
-               } `catchError` (\e -> do {io (putStrLn e); modify (\_ -> (w,r))})
+               } `catchError` (\e -> do {io (putStrLn e); put (w,r)})
     else echo $ help command
     where (command:args) = words s
 
