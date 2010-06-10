@@ -1,5 +1,5 @@
 module Dnd.Dice.DiceController where
-  import Dnd.Dice.DiceRoller (d, dc, Roll, RollHistory, ppRollHistory)
+  import Dnd.Dice.DiceRoller (d, dc, Roll, RollHistory, ppRollHistory, perrinCrit)
 --  import Text.ParserCombinators.Parsec
   import Control.Monad.State.Lazy
 
@@ -9,6 +9,8 @@ module Dnd.Dice.DiceController where
             | Mult Expr Expr
             | D Expr Expr
             | Dc Expr Expr
+            | P
+              deriving (Show, Eq, Read)
 
   type DiceResult = StateT [RollHistory] IO Int
 
@@ -19,6 +21,7 @@ module Dnd.Dice.DiceController where
   eval (Mult e1 e2) = performOnDiceResult (*) e1 e2
   eval (D e1 e2) = rollToDiceResult (d) e1 e2
   eval (Dc e1 e2) = rollToDiceResult (dc) e1 e2
+  eval P = perrinToDiceResult
 
   -- Perform the provided binary operation on two expressions. Concatinates their HistoryLists
   performOnDiceResult :: (Int -> Int -> Int) -> Expr -> Expr -> DiceResult
@@ -32,6 +35,11 @@ module Dnd.Dice.DiceController where
                                                 (rightV, rightH) <- runStateT (eval e2) []
                                                 (midV, midH) <- runStateT (leftV `op` rightV) []
                                                 return (midV, leftH ++ (midH : rightH))
+
+  -- Roll some Perrin rolls and give a result
+  perrinToDiceResult :: DiceResult
+  perrinToDiceResult = StateT $ \h -> do (v, newH) <- runStateT perrinCrit []
+                                         return (v, [newH])
 
   ppDiceResult :: DiceResult -> IO ()
   ppDiceResult dr = do (v, hs) <- runStateT dr []
