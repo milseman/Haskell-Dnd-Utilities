@@ -27,9 +27,7 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   -- todo: implement error handling
 
   -- | Help documentation
-  help "all"       = concatMap (\c -> if c /= "all" then c ++ "\n" ++ help c ++ "\n\n"
-                                      else ""
-                               ) commands
+  help "all"       = concatMap (\c -> if c /= "all" then c ++ "\n" ++ help c ++ "\n\n" else "") commands
   help "meta"      = "  <pos>                                = before | after\n"
                   ++ "  <(entry-)name|field>                 = String (no spaces)\n"
                   ++ "  <initiative|hp|duration|turns|field> = Int"
@@ -39,6 +37,7 @@ module Dnd.DM.CombatTracker.CTInterpreter where
                   ++ "  Special: `help all' shows all the command's help"
   help "commands"  = "Avaliable commands: \n  " ++ concatMap (\c -> c++", ") commands
                   ++ "\n Use `help <command>' to see help on a particular command"
+
   help "character" = "  Description: Add a character to combat\n"
                   ++ "  Usage: character <name> <initiative> [<pos> <entry-name>]\n"
                   ++ "  Default: insert according to provided initiative"
@@ -133,13 +132,8 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   commandHandler "next" [] = controller  $ NextImplicit
   commandHandler "move" [n,pos,n2]= controller $ Move n (readPos pos) n2
   commandHandler "remove" [n] = controller $ Remove n
-  commandHandler "update" [n,field,val] | areNumbers [val] =
-    controller $ Update n field (read val)
+  commandHandler "update" [n,field,val] | areNumbers [val] = controller $ Update n field (read val)
   commandHandler "removeField" [n,field] = controller $ RemoveField n field
-  -- commandHandler "undo" [i] = echo ""
-  -- commandHandler "undo" []  = echo""
-  -- commandHandler "redo" [i] = echo ""
-  -- commandHandler "redo" []  = echo""
   commandHandler "show" [] = do modify id
   commandHandler "undo" [] = controller UndoImplicit
   commandHandler "undo" [i] | areNumbers [i] = controller $ Undo (read i)
