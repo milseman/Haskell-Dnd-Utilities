@@ -1,8 +1,8 @@
 module Dnd.Dice.DiceParser where
-  import Dnd.Dice.DiceController
   import Data.Char
   import Data.List
   import Data.List.Utils
+  import Dnd.Dice.DiceController
 
   -- After trying parsec for a while, I'm just going to handroll a custom parser
   -- This is not code that I'm particularly happy with. I'll come back around to fixing this later
@@ -109,3 +109,9 @@ module Dnd.Dice.DiceParser where
           topBreakWDepth ss (t:ts) 0 h | t `elem` ss = (reverse h,t,ts)
           topBreakWDepth ss (t:ts) n h = topBreakWDepth ss ts n (t:h)
           topBreakWDepth _ [] _ h = (reverse h, "", [])
+
+  -- Do the whole thing
+  parseEvalPrint :: String -> IO ()
+  parseEvalPrint s = case parser s of
+                       Result r -> ppDiceResult $ eval r
+                       Error e  -> putStrLn e                                    

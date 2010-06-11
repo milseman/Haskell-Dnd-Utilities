@@ -2,6 +2,7 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   import Data.Wheel
   import Dnd.DM.CombatTracker.Core as Core
   import Dnd.DM.CombatTracker.CTController
+  import qualified Dnd.Dice.DiceParser as Dice    
 
   import Data.Char
   import qualified Data.List as L
@@ -19,7 +20,7 @@ module Dnd.DM.CombatTracker.CTInterpreter where
 
   -- | The commands available for the user to type in
   commands = [ "character", "monster", "effect", "damage", "heal", "delay", "next"
-             , "move", "remove", "update", "show", "undo", "redo", "help" ]
+             , "move", "remove", "update", "show", "roll", "undo", "redo", "help" ]
 
   -- todo: implement a general help functionality module, using pretty pringing,
   -- key value pairs, CFGs, and other cool stuff.
@@ -70,8 +71,24 @@ module Dnd.DM.CombatTracker.CTInterpreter where
                     ++ "  Usage: undo [turns]"
   help "redo"        = "  Description: redo undid commands\n"
                     ++ "  Usage: redo [turns]\n"
-                    ++ "  Note: Can only be used after undos. Any modification to"
-                     ++ " the wheel outside of undo will clear the redo stack"
+                    ++ "  Note: Can only be used after undos. Any modification to\n"
+                    ++ "  the wheel outside of undo will clear the redo stack"
+  help "roll"        = "  Description: Parse the formula and roll some dice\n"
+                    ++ "  Usage: roll <formula>\n"
+                    ++ "  Formula can be any arithmetic expression (parenthesis too), and can include these:\n"
+                    ++ "  <n> d <s>    : roll an s sided die n times, summing the result.\n"
+                    ++ "  perrin       : roll a d10-1, if 9 repeat. Sum the results. `p' is aliased to perrin\n"
+                    ++ "  <n> crit <s> : as `d', but if s is rolled, add a perrin roll. `c' is aliased to crit\n"
+                    ++ "  Examples:\n"
+                    ++ "    1d6             -- roll a 6 sided die\n"
+                    ++ "    1d20 + p        -- roll a 20 sided die, and add a perrin roll (see help perrin)\n"
+                    ++ "    1 crit 20 + 2d6 -- roll a d20, if the result is 20 then add a perrin roll, finally\n"
+                    ++ "                       add 2d6\n"
+                    ++ "    2*(1+3)d6       -- roll 4d6, and multiply result by 2\n"
+                    ++ "  Precedence (loosest to strongest): \n"
+                    ++ "    [(+, -), *, (d, crit, c), (<int>, perrin, p, '(' <expr> ')' )] "
+
+                    
 
   -- help "undo"      = "  Usage: undo <turns> !! Not yet available"
   -- help "redo"      = "  Usage: redo <turns> !! Not yet available"
@@ -141,6 +158,7 @@ module Dnd.DM.CombatTracker.CTInterpreter where
   commandHandler "redo" [i] | areNumbers [i] = controller $ Redo (read i)
   commandHandler "help" [c] = throwError $ help c
   commandHandler "help" [] = throwError $ help "help"
+  commandHandler "roll" form = (io . Dice.parseEvalPrint) (concat form) >> throwError ""
   commandHandler c _ = throwError $ "Error: ill-formed command\n" ++ help c
 
   -- | Echo what is read
