@@ -1,0 +1,7 @@
+Execute by running from this top-most directory. e.g. "ghci Dnd/Dice/DiceInterpreter.hs"
+
+Enter the interpreters by running the "main" function
+
+See help by typing help in the running interpreter
+
+Instructions on getting haskell's readline libraries installed on Arch in the source of the Interpreter.hs files
