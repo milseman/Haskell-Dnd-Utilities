@@ -1,7 +1,14 @@
 Execute by running from this top-most directory. e.g. "ghci Dnd/Dice/DiceInterpreter.hs"
 
+Required packages:
+  Data.List.Utils (provided in "missingh")
+  System.Console.Readline (provided in haskell readline package, see below for Arch)
+
+For Arch users:
+  GHC is unable to properly understand linker scripts, so replace
+  /usr/lib/ncurses.so with a symlink to the proper ncurses.so
+  e.g: sudo ln -s libncurses.so.5 libncurses.so
+
 Enter the interpreters by running the "main" function
 
 See help by typing help in the running interpreter
-
-Instructions on getting haskell's readline libraries installed on Arch in the source of the Interpreter.hs files
